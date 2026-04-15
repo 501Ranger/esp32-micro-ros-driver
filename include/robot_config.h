@@ -33,15 +33,15 @@ constexpr uint8_t LEFT_REVERSE_CHANNEL = 1;
 constexpr uint8_t RIGHT_FORWARD_CHANNEL = 2;
 constexpr uint8_t RIGHT_REVERSE_CHANNEL = 3;
 constexpr int16_t PWM_MAX = (1 << PWM_BITS) - 1;
-constexpr float MOTOR_MIN_EFFECTIVE_DUTY = 0.35f;
+constexpr float MOTOR_MIN_EFFECTIVE_DUTY = 0.60f;
 
-constexpr float WHEEL_DIAMETER_M = 0.065f;
-constexpr float TRACK_WIDTH_M = 0.180f;
-constexpr float ENCODER_TICKS_PER_WHEEL_REV = 1320.0f;
+constexpr float WHEEL_DIAMETER_M = 0.048f;
+constexpr float TRACK_WIDTH_M = 0.130f;
+constexpr float ENCODER_TICKS_PER_WHEEL_REV = 1040.0f;
 constexpr float MAX_WHEEL_LINEAR_SPEED_MPS = 0.30f;
 constexpr float VELOCITY_DEADBAND_MPS = 0.01f;
 
-constexpr float MOTOR_PID_KP = 2.00f;
+constexpr float MOTOR_PID_KP = 1.00f;
 constexpr float MOTOR_PID_KI = 0.00f;
 constexpr float MOTOR_PID_KD = 0.00f;
 constexpr float MOTOR_PID_INTEGRAL_LIMIT = 0.30f;
