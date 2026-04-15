@@ -39,6 +39,14 @@ constexpr float WHEEL_DIAMETER_M = 0.065f;
 constexpr float TRACK_WIDTH_M = 0.180f;
 constexpr float ENCODER_TICKS_PER_WHEEL_REV = 1320.0f;
 constexpr float MAX_WHEEL_LINEAR_SPEED_MPS = 0.30f;
+constexpr float VELOCITY_DEADBAND_MPS = 0.01f;
+
+constexpr float MOTOR_PID_KP = 2.00f;
+constexpr float MOTOR_PID_KI = 0.00f;
+constexpr float MOTOR_PID_KD = 0.00f;
+constexpr float MOTOR_PID_INTEGRAL_LIMIT = 0.30f;
+constexpr float MOTOR_PID_OUTPUT_LIMIT = 0.60f;
+constexpr float MOTOR_FEEDFORWARD_GAIN = 1.00f;
 
 constexpr uint32_t CONTROL_PERIOD_MS = 20;
 constexpr uint32_t COMMAND_TIMEOUT_MS = 100;
