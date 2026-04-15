@@ -176,8 +176,14 @@ void RobotApp::stopMotors() {
 }
 
 void RobotApp::setupTransport() {
+#ifdef USE_WIFI_TRANSPORT
+  IPAddress agent_ip;
+  agent_ip.fromString(AGENT_IP);
+  set_microros_wifi_transports(const_cast<char*>(WIFI_SSID), const_cast<char*>(WIFI_PASSWORD), agent_ip, AGENT_PORT);
+#else
   ros_serial_.begin(UART_BAUDRATE, SERIAL_8N1, UART0_RX, UART0_TX);
   set_microros_serial_transports(ros_serial_);
+#endif
 }
 
 void RobotApp::setupSensors() {
