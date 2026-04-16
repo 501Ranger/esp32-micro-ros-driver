@@ -46,7 +46,45 @@ void RobotApp::setup() {
 }
 
 void RobotApp::loop() {
+  handleSerialCommands();
   updateAgentStateMachine();
+}
+
+void RobotApp::handleSerialCommands() {
+#ifdef USE_WIFI_TRANSPORT
+  static String input_buffer = "";
+  while (Serial.available()) {
+    char c = Serial.read();
+    if (c == '\n' || c == '\r') {
+      if (input_buffer.length() > 0) {
+        int separator_idx = input_buffer.indexOf(':');
+        if (separator_idx != -1) {
+          String cmd = input_buffer.substring(0, separator_idx);
+          float val = input_buffer.substring(separator_idx + 1).toFloat();
+
+          bool updated = true;
+          if (cmd == "p") kp_ = val;
+          else if (cmd == "i") ki_ = val;
+          else if (cmd == "d") kd_ = val;
+          else if (cmd == "f") kf_ = val;
+          else if (cmd == "o") output_limit_ = val;
+          else updated = false;
+
+          if (updated) {
+            left_pid_.setGains(kp_, ki_, kd_);
+            right_pid_.setGains(kp_, ki_, kd_);
+            left_pid_.setOutputLimit(output_limit_);
+            right_pid_.setOutputLimit(output_limit_);
+            Serial.printf("Updated -> P:%.2f I:%.2f D:%.2f F:%.2f O:%.2f\n", kp_, ki_, kd_, kf_, output_limit_);
+          }
+        }
+        input_buffer = "";
+      }
+    } else {
+      input_buffer += c;
+    }
+  }
+#endif
 }
 
 void RobotApp::cmdVelCallback(const void *msg_in) {
@@ -211,7 +249,7 @@ void RobotApp::applyMotorCommand(float left_velocity_mps, float right_velocity_m
     left_pid_.reset();
   } else {
     const float left_feedforward =
-        MOTOR_FEEDFORWARD_GAIN * (left_velocity_mps / MAX_WHEEL_LINEAR_SPEED_MPS);
+        kf_ * (left_velocity_mps / MAX_WHEEL_LINEAR_SPEED_MPS);
     const float left_pid_correction = left_pid_.update(left_velocity_mps, left_wheel_.velocity_mps, CONTROL_PERIOD_MS / 1000.0f);
     left_duty = left_feedforward + left_pid_correction;
   }
@@ -220,7 +258,7 @@ void RobotApp::applyMotorCommand(float left_velocity_mps, float right_velocity_m
     right_pid_.reset();
   } else {
     const float right_feedforward =
-        MOTOR_FEEDFORWARD_GAIN * (right_velocity_mps / MAX_WHEEL_LINEAR_SPEED_MPS);
+        kf_ * (right_velocity_mps / MAX_WHEEL_LINEAR_SPEED_MPS);
     const float right_pid_correction =
         right_pid_.update(right_velocity_mps, right_wheel_.velocity_mps, CONTROL_PERIOD_MS / 1000.0f);
     right_duty = right_feedforward + right_pid_correction;

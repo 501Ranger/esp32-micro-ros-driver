@@ -9,6 +9,15 @@ class PidController {
   float update(float target, float measurement, float dt);
   void reset();
 
+  void setGains(float kp, float ki, float kd) {
+    kp_ = kp;
+    ki_ = ki;
+    kd_ = kd;
+  }
+
+  void setIntegralLimit(float limit) { integral_limit_ = limit; }
+  void setOutputLimit(float limit) { output_limit_ = limit; }
+
  private:
   float kp_;
   float ki_;

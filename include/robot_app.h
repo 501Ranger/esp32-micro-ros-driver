@@ -16,6 +16,7 @@
 #include "motor_driver.h"
 #include "pid_controller.h"
 #include "qmi8658_sensor.h"
+#include "robot_config.h"
 #include "robot_types.h"
 
 namespace robot {
@@ -38,6 +39,7 @@ class RobotApp {
   void setupTransport();
   void setupSensors();
   void applyMotorCommand(float left_velocity_mps, float right_velocity_mps);
+  void handleSerialCommands();
   void updateWheelMeasurements(float dt);
   void fillOdomMessage(const builtin_interfaces__msg__Time &stamp);
   void fillImuMessage(const builtin_interfaces__msg__Time &stamp);
@@ -104,6 +106,13 @@ class RobotApp {
   float current_right_duty_ = 0.0f;
   float target_left_velocity_mps_ = 0.0f;
   float target_right_velocity_mps_ = 0.0f;
+
+  // Dynamic tuning parameters
+  float kp_ = robot_config::MOTOR_PID_KP;
+  float ki_ = robot_config::MOTOR_PID_KI;
+  float kd_ = robot_config::MOTOR_PID_KD;
+  float kf_ = robot_config::MOTOR_FEEDFORWARD_GAIN;
+  float output_limit_ = robot_config::MOTOR_PID_OUTPUT_LIMIT;
 };
 
 }  // namespace robot
