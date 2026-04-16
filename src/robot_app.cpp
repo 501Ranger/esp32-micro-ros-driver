@@ -100,6 +100,17 @@ void RobotApp::controlTimerCallbackImpl() {
   target_right_velocity_mps_ = right_target;
   applyMotorCommand(left_target, right_target);
 
+  // VOFA+ JustFloat protocol
+  float debug_data[] = {
+      target_left_velocity_mps_,
+      left_wheel_.velocity_mps,
+      target_right_velocity_mps_,
+      right_wheel_.velocity_mps
+  };
+  Serial.write(reinterpret_cast<uint8_t*>(debug_data), sizeof(debug_data));
+  const uint8_t tail[4] = {0x00, 0x00, 0x80, 0x7F};
+  Serial.write(tail, 4);
+
   const builtin_interfaces__msg__Time stamp = nowRosTime();
   fillOdomMessage(stamp);
 
@@ -177,6 +188,7 @@ void RobotApp::stopMotors() {
 
 void RobotApp::setupTransport() {
 #ifdef USE_WIFI_TRANSPORT
+  Serial.begin(UART_BAUDRATE, SERIAL_8N1, UART0_RX, UART0_TX);
   IPAddress agent_ip;
   agent_ip.fromString(AGENT_IP);
   set_microros_wifi_transports(const_cast<char*>(WIFI_SSID), const_cast<char*>(WIFI_PASSWORD), agent_ip, AGENT_PORT);

@@ -41,7 +41,7 @@ constexpr float ENCODER_TICKS_PER_WHEEL_REV = 1040.0f;
 constexpr float MAX_WHEEL_LINEAR_SPEED_MPS = 0.30f;
 constexpr float VELOCITY_DEADBAND_MPS = 0.01f;
 
-constexpr float MOTOR_PID_KP = 0.30f;
+constexpr float MOTOR_PID_KP = 0.80f;
 constexpr float MOTOR_PID_KI = 0.50f;
 constexpr float MOTOR_PID_KD = 0.00f;
 constexpr float MOTOR_PID_INTEGRAL_LIMIT = 0.30f;
