@@ -259,8 +259,8 @@ void RobotApp::updateWheelMeasurements(float dt) {
   const float left_delta_m = delta_left_ticks * meters_per_tick;
   const float right_delta_m = delta_right_ticks * meters_per_tick;
 
-  left_wheel_.velocity_mps = -(left_delta_m / dt);
-  right_wheel_.velocity_mps = -(right_delta_m / dt);
+  left_wheel_.velocity_mps = (left_delta_m / dt);
+  right_wheel_.velocity_mps = (right_delta_m / dt);
 
   const float linear_velocity = 0.5f * (left_wheel_.velocity_mps + right_wheel_.velocity_mps);
   const float angular_velocity = (right_wheel_.velocity_mps - left_wheel_.velocity_mps) / TRACK_WIDTH_M;

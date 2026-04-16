@@ -23,8 +23,8 @@ constexpr uint32_t UART_BAUDRATE = 115200;
 
 constexpr bool LEFT_MOTOR_INVERTED = false;
 constexpr bool RIGHT_MOTOR_INVERTED = false;
-constexpr bool LEFT_ENCODER_INVERTED = false;
-constexpr bool RIGHT_ENCODER_INVERTED = false;
+constexpr bool LEFT_ENCODER_INVERTED = true;
+constexpr bool RIGHT_ENCODER_INVERTED = true;
 
 constexpr uint8_t PWM_BITS = 8;
 constexpr uint32_t PWM_FREQUENCY = 20000;
@@ -33,7 +33,7 @@ constexpr uint8_t LEFT_REVERSE_CHANNEL = 1;
 constexpr uint8_t RIGHT_FORWARD_CHANNEL = 2;
 constexpr uint8_t RIGHT_REVERSE_CHANNEL = 3;
 constexpr int16_t PWM_MAX = (1 << PWM_BITS) - 1;
-constexpr float MOTOR_MIN_EFFECTIVE_DUTY = 0.60f;
+constexpr float MOTOR_MIN_EFFECTIVE_DUTY = 0.15f;
 
 constexpr float WHEEL_DIAMETER_M = 0.048f;
 constexpr float TRACK_WIDTH_M = 0.130f;
@@ -41,12 +41,12 @@ constexpr float ENCODER_TICKS_PER_WHEEL_REV = 1040.0f;
 constexpr float MAX_WHEEL_LINEAR_SPEED_MPS = 0.30f;
 constexpr float VELOCITY_DEADBAND_MPS = 0.01f;
 
-constexpr float MOTOR_PID_KP = 0.80f;
-constexpr float MOTOR_PID_KI = 0.50f;
+constexpr float MOTOR_PID_KP = 1.40f;
+constexpr float MOTOR_PID_KI = 0.80f;
 constexpr float MOTOR_PID_KD = 0.00f;
-constexpr float MOTOR_PID_INTEGRAL_LIMIT = 0.30f;
-constexpr float MOTOR_PID_OUTPUT_LIMIT = 0.60f;
-constexpr float MOTOR_FEEDFORWARD_GAIN = 1.00f;
+constexpr float MOTOR_PID_INTEGRAL_LIMIT = 0.80f;
+constexpr float MOTOR_PID_OUTPUT_LIMIT = 0.80f;
+constexpr float MOTOR_FEEDFORWARD_GAIN = 0.20f;
 
 constexpr uint32_t CONTROL_PERIOD_MS = 20;
 constexpr uint32_t COMMAND_TIMEOUT_MS = 100;
