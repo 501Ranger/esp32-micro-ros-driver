@@ -41,6 +41,8 @@ void RobotApp::setup() {
     imu_ready_ = imu_sensor_.calibrateGyroBias();
   }
 
+  Serial1.begin(UART_BAUDRATE, SERIAL_8N1, 15, 16);
+
   last_cmd_vel_ms_ = millis();
   last_control_update_ms_ = millis();
 }
@@ -53,8 +55,8 @@ void RobotApp::loop() {
 void RobotApp::handleSerialCommands() {
 #ifdef USE_WIFI_TRANSPORT
   static String input_buffer = "";
-  while (Serial.available()) {
-    char c = Serial.read();
+  while (Serial1.available()) {
+    char c = Serial1.read();
     if (c == '\n' || c == '\r') {
       if (input_buffer.length() > 0) {
         int separator_idx = input_buffer.indexOf(':');
@@ -75,7 +77,7 @@ void RobotApp::handleSerialCommands() {
             right_pid_.setGains(kp_, ki_, kd_);
             left_pid_.setOutputLimit(output_limit_);
             right_pid_.setOutputLimit(output_limit_);
-            Serial.printf("Updated -> P:%.2f I:%.2f D:%.2f F:%.2f O:%.2f\n", kp_, ki_, kd_, kf_, output_limit_);
+            Serial1.printf("Updated -> P:%.2f I:%.2f D:%.2f F:%.2f O:%.2f\n", kp_, ki_, kd_, kf_, output_limit_);
           }
         }
         input_buffer = "";
@@ -145,9 +147,9 @@ void RobotApp::controlTimerCallbackImpl() {
       target_right_velocity_mps_,
       right_wheel_.velocity_mps
   };
-  Serial.write(reinterpret_cast<uint8_t*>(debug_data), sizeof(debug_data));
+  Serial1.write(reinterpret_cast<uint8_t*>(debug_data), sizeof(debug_data));
   const uint8_t tail[4] = {0x00, 0x00, 0x80, 0x7F};
-  Serial.write(tail, 4);
+  Serial1.write(tail, 4);
 
   const builtin_interfaces__msg__Time stamp = nowRosTime();
   fillOdomMessage(stamp);
