@@ -1,6 +1,7 @@
 #include "robot_app.h"
 
 #include <cmath>
+#include <ArduinoOTA.h>
 
 #include <micro_ros_platformio.h>
 #include <rmw_microros/rmw_microros.h>
@@ -45,9 +46,16 @@ void RobotApp::setup() {
 
   last_cmd_vel_ms_ = millis();
   last_control_update_ms_ = millis();
+
+#ifdef USE_WIFI_TRANSPORT
+  ArduinoOTA.begin();
+#endif
 }
 
 void RobotApp::loop() {
+#ifdef USE_WIFI_TRANSPORT
+  ArduinoOTA.handle();
+#endif
   handleSerialCommands();
   updateAgentStateMachine();
 }
