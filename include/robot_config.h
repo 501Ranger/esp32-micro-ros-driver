@@ -41,12 +41,12 @@ constexpr float ENCODER_TICKS_PER_WHEEL_REV = 1040.0f;
 constexpr float MAX_WHEEL_LINEAR_SPEED_MPS = 1.70f;
 constexpr float VELOCITY_DEADBAND_MPS = 0.01f;
 
-constexpr float MOTOR_PID_KP = 0.21f;
-constexpr float MOTOR_PID_KI = 2.38f;
+constexpr float MOTOR_PID_KP = 0.24f;
+constexpr float MOTOR_PID_KI = 2.68f;
 constexpr float MOTOR_PID_KD = 0.00f;
 constexpr float MOTOR_PID_INTEGRAL_LIMIT = 0.80f;
 constexpr float MOTOR_PID_OUTPUT_LIMIT = 0.89f;
-constexpr float MOTOR_FEEDFORWARD_GAIN = 2.29f;
+constexpr float MOTOR_FEEDFORWARD_GAIN = 2.38f;
 
 constexpr uint32_t CONTROL_PERIOD_MS = 20;
 constexpr uint32_t COMMAND_TIMEOUT_MS = 100;
