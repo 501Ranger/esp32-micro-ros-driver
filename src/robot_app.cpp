@@ -127,12 +127,12 @@ void RobotApp::controlTimerCallbackImpl() {
   }
   last_control_update_ms_ = now_ms;
 
-  updateWheelMeasurements(dt);
   if (imu_ready_) {
     imu_sensor_.read(latest_imu_);
   } else {
     latest_imu_.valid = false;
   }
+  updateWheelMeasurements(dt);
 
   float linear_command = target_cmd_.linear.x;
   float angular_command = target_cmd_.angular.z;
@@ -311,7 +311,14 @@ void RobotApp::updateWheelMeasurements(float dt) {
   right_wheel_.velocity_mps = (right_delta_m / dt);
 
   const float linear_velocity = 0.5f * (left_wheel_.velocity_mps + right_wheel_.velocity_mps);
-  const float angular_velocity = (right_wheel_.velocity_mps - left_wheel_.velocity_mps) / TRACK_WIDTH_M;
+  
+  float angular_velocity;
+  if (latest_imu_.valid) {
+    angular_velocity = latest_imu_.gz;
+  } else {
+    angular_velocity = (right_wheel_.velocity_mps - left_wheel_.velocity_mps) / TRACK_WIDTH_M;
+  }
+  
   const float delta_yaw = angular_velocity * dt;
   const float heading_mid = odom_yaw_ + 0.5f * delta_yaw;
 
