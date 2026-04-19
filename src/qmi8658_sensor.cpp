@@ -1,5 +1,6 @@
 #include "qmi8658_sensor.h"
 
+#include <cmath>
 #include "robot_config.h"
 
 namespace robot {
@@ -114,6 +115,27 @@ bool QMI8658Sensor::read(ImuSample &sample) {
   sample.gz = (static_cast<float>(raw_gz) / gyro_lsb_per_dps) * RAD_PER_DEG - gyro_bias_z_;
   sample.valid = true;
   return true;
+}
+
+void QMI8658Sensor::updateComplementaryFilter(ImuSample &sample, float dt) {
+  if (!sample.valid) return;
+
+  float accel_pitch = atan2f(-sample.ax, sqrtf(sample.ay * sample.ay + sample.az * sample.az));
+  float accel_roll = atan2f(sample.ay, sample.az);
+
+  float gyro_pitch_rate = sample.gy;
+  float gyro_roll_rate = sample.gx;
+  float gyro_yaw_rate = sample.gz;
+
+  const float alpha = 0.98f;
+
+  filter_pitch_ = alpha * (filter_pitch_ + gyro_pitch_rate * dt) + (1.0f - alpha) * accel_pitch;
+  filter_roll_ = alpha * (filter_roll_ + gyro_roll_rate * dt) + (1.0f - alpha) * accel_roll;
+  filter_yaw_ += gyro_yaw_rate * dt;
+
+  sample.pitch = filter_pitch_;
+  sample.roll = filter_roll_;
+  sample.yaw = filter_yaw_;
 }
 
 bool QMI8658Sensor::writeRegister(uint8_t reg, uint8_t value) {

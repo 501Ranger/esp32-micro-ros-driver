@@ -23,6 +23,9 @@ struct ImuSample {
   float gx = 0.0f;
   float gy = 0.0f;
   float gz = 0.0f;
+  float pitch = 0.0f;
+  float roll = 0.0f;
+  float yaw = 0.0f;
   float temperature_c = 0.0f;
   bool valid = false;
 };

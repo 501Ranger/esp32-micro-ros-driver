@@ -129,6 +129,7 @@ void RobotApp::controlTimerCallbackImpl() {
 
   if (imu_ready_) {
     imu_sensor_.read(latest_imu_);
+    imu_sensor_.updateComplementaryFilter(latest_imu_, dt);
   } else {
     latest_imu_.valid = false;
   }
@@ -354,6 +355,18 @@ void RobotApp::fillImuMessage(const builtin_interfaces__msg__Time &stamp) {
   imu_msg_.linear_acceleration.x = latest_imu_.ax;
   imu_msg_.linear_acceleration.y = latest_imu_.ay;
   imu_msg_.linear_acceleration.z = latest_imu_.az;
+
+  double cy = cos(latest_imu_.yaw * 0.5);
+  double sy = sin(latest_imu_.yaw * 0.5);
+  double cp = cos(latest_imu_.pitch * 0.5);
+  double sp = sin(latest_imu_.pitch * 0.5);
+  double cr = cos(latest_imu_.roll * 0.5);
+  double sr = sin(latest_imu_.roll * 0.5);
+
+  imu_msg_.orientation.w = cr * cp * cy + sr * sp * sy;
+  imu_msg_.orientation.x = sr * cp * cy - cr * sp * sy;
+  imu_msg_.orientation.y = cr * sp * cy + sr * cp * sy;
+  imu_msg_.orientation.z = cr * cp * sy - sr * sp * cy;
 }
 
 void RobotApp::initializeCovariances() {
