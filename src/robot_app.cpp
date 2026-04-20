@@ -1,6 +1,7 @@
 #include "robot_app.h"
 
 #include <cmath>
+#include <WiFi.h>
 #include <ArduinoOTA.h>
 
 #include <micro_ros_platformio.h>
@@ -55,13 +56,21 @@ void RobotApp::setup() {
 void RobotApp::loop() {
 #ifdef USE_WIFI_TRANSPORT
   ArduinoOTA.handle();
+#else
+  static bool ota_started = false;
+  if (!ota_started && WiFi.status() == WL_CONNECTED) {
+    ArduinoOTA.begin();
+    ota_started = true;
+  }
+  if (ota_started) {
+    ArduinoOTA.handle();
+  }
 #endif
   handleSerialCommands();
   updateAgentStateMachine();
 }
 
 void RobotApp::handleSerialCommands() {
-#ifdef USE_WIFI_TRANSPORT
   static String input_buffer = "";
   while (Serial1.available()) {
     char c = Serial1.read();
@@ -78,6 +87,7 @@ void RobotApp::handleSerialCommands() {
           else if (cmd == "d") kd_ = val;
           else if (cmd == "f") kf_ = val;
           else if (cmd == "o") output_limit_ = val;
+          else if (cmd == "m") motor_min_duty_ = val;
           else updated = false;
 
           if (updated) {
@@ -85,7 +95,7 @@ void RobotApp::handleSerialCommands() {
             right_pid_.setGains(kp_, ki_, kd_);
             left_pid_.setOutputLimit(output_limit_);
             right_pid_.setOutputLimit(output_limit_);
-            Serial1.printf("Updated -> P:%.2f I:%.2f D:%.2f F:%.2f O:%.2f\n", kp_, ki_, kd_, kf_, output_limit_);
+            Serial1.printf("Updated -> P:%.2f I:%.2f D:%.2f F:%.2f O:%.2f M:%.2f\n", kp_, ki_, kd_, kf_, output_limit_, motor_min_duty_);
           }
         }
         input_buffer = "";
@@ -94,7 +104,6 @@ void RobotApp::handleSerialCommands() {
       input_buffer += c;
     }
   }
-#endif
 }
 
 void RobotApp::cmdVelCallback(const void *msg_in) {
@@ -242,6 +251,7 @@ void RobotApp::setupTransport() {
   agent_ip.fromString(AGENT_IP);
   set_microros_wifi_transports(const_cast<char*>(WIFI_SSID), const_cast<char*>(WIFI_PASSWORD), agent_ip, AGENT_PORT);
 #else
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   ros_serial_.begin(UART_BAUDRATE, SERIAL_8N1, UART0_RX, UART0_TX);
   set_microros_serial_transports(ros_serial_);
 #endif
@@ -278,11 +288,11 @@ void RobotApp::applyMotorCommand(float left_velocity_mps, float right_velocity_m
   left_duty = constrain(left_duty, -1.0f, 1.0f);
   right_duty = constrain(right_duty, -1.0f, 1.0f);
 
-  if (left_duty != 0.0f && fabsf(left_duty) < MOTOR_MIN_EFFECTIVE_DUTY) {
-    left_duty = copysignf(MOTOR_MIN_EFFECTIVE_DUTY, left_duty);
+  if (left_duty != 0.0f && fabsf(left_duty) < motor_min_duty_) {
+    left_duty = copysignf(motor_min_duty_, left_duty);
   }
-  if (right_duty != 0.0f && fabsf(right_duty) < MOTOR_MIN_EFFECTIVE_DUTY) {
-    right_duty = copysignf(MOTOR_MIN_EFFECTIVE_DUTY, right_duty);
+  if (right_duty != 0.0f && fabsf(right_duty) < motor_min_duty_) {
+    right_duty = copysignf(motor_min_duty_, right_duty);
   }
 
   current_left_duty_ = left_duty;

@@ -32,10 +32,6 @@ void MotorDriver::setDuty(float duty) const {
     duty = -duty;
   }
 
-  if (duty != 0.0f && fabsf(duty) < MOTOR_MIN_EFFECTIVE_DUTY) {
-    duty = copysignf(MOTOR_MIN_EFFECTIVE_DUTY, duty);
-  }
-
   const int16_t pwm = static_cast<int16_t>(roundf(fabsf(duty) * PWM_MAX));
   if (pwm == 0) {
     stop();

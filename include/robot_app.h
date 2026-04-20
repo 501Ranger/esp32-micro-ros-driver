@@ -113,6 +113,7 @@ class RobotApp {
   float kd_ = robot_config::MOTOR_PID_KD;
   float kf_ = robot_config::MOTOR_FEEDFORWARD_GAIN;
   float output_limit_ = robot_config::MOTOR_PID_OUTPUT_LIMIT;
+  float motor_min_duty_ = robot_config::MOTOR_MIN_EFFECTIVE_DUTY;
 };
 
 }  // namespace robot
