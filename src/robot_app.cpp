@@ -263,37 +263,39 @@ void RobotApp::setupSensors() {
 }
 
 void RobotApp::applyMotorCommand(float left_velocity_mps, float right_velocity_mps) {
-  float left_duty = 0.0f;
-  float right_duty = 0.0f;
+  const float control_dt = CONTROL_PERIOD_MS / 1000.0f;
+  const auto compute_duty = [&](float target_mps, float measured_mps, PidController &pid, float previous_duty) {
+    if (fabsf(target_mps) <= VELOCITY_DEADBAND_MPS) {
+      pid.reset();
+      return 0.0f;
+    }
 
-  if (fabsf(left_velocity_mps) <= VELOCITY_DEADBAND_MPS) {
-    left_pid_.reset();
-  } else {
-    const float left_feedforward =
-        kf_ * (left_velocity_mps / MAX_WHEEL_LINEAR_SPEED_MPS);
-    const float left_pid_correction = left_pid_.update(left_velocity_mps, left_wheel_.velocity_mps, CONTROL_PERIOD_MS / 1000.0f);
-    left_duty = left_feedforward + left_pid_correction;
-  }
+    const float feedforward = kf_ * (target_mps / MAX_WHEEL_LINEAR_SPEED_MPS);
+    const float pid_correction = pid.update(target_mps, measured_mps, control_dt);
+    float duty = constrain(feedforward + pid_correction, -1.0f, 1.0f);
 
-  if (fabsf(right_velocity_mps) <= VELOCITY_DEADBAND_MPS) {
-    right_pid_.reset();
-  } else {
-    const float right_feedforward =
-        kf_ * (right_velocity_mps / MAX_WHEEL_LINEAR_SPEED_MPS);
-    const float right_pid_correction =
-        right_pid_.update(right_velocity_mps, right_wheel_.velocity_mps, CONTROL_PERIOD_MS / 1000.0f);
-    right_duty = right_feedforward + right_pid_correction;
-  }
+    // Static friction compensation is only needed near standstill; keeping it always-on causes low-speed hunting.
+    const bool near_standstill = fabsf(measured_mps) < LOW_SPEED_MIN_DUTY_ENABLE_SPEED_MPS;
+    if (duty != 0.0f && fabsf(duty) < motor_min_duty_ && near_standstill) {
+      duty = copysignf(motor_min_duty_, duty);
+    }
 
-  left_duty = constrain(left_duty, -1.0f, 1.0f);
-  right_duty = constrain(right_duty, -1.0f, 1.0f);
+    // In low-speed mode, avoid immediate reverse correction when overshoot happens.
+    if (fabsf(target_mps) < LOW_SPEED_DIRECTION_GUARD_MPS &&
+        fabsf(measured_mps) < LOW_SPEED_DIRECTION_GUARD_MPS &&
+        target_mps * duty < 0.0f) {
+      duty = 0.0f;
+      pid.reset();
+    }
 
-  if (left_duty != 0.0f && fabsf(left_duty) < motor_min_duty_) {
-    left_duty = copysignf(motor_min_duty_, left_duty);
-  }
-  if (right_duty != 0.0f && fabsf(right_duty) < motor_min_duty_) {
-    right_duty = copysignf(motor_min_duty_, right_duty);
-  }
+    const float max_step = DUTY_SLEW_RATE_PER_SEC * control_dt;
+    return constrain(duty, previous_duty - max_step, previous_duty + max_step);
+  };
+
+  const float left_duty = compute_duty(
+      left_velocity_mps, left_wheel_.velocity_mps, left_pid_, current_left_duty_);
+  const float right_duty = compute_duty(
+      right_velocity_mps, right_wheel_.velocity_mps, right_pid_, current_right_duty_);
 
   current_left_duty_ = left_duty;
   current_right_duty_ = right_duty;
