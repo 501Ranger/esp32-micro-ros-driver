@@ -172,23 +172,7 @@ void RobotApp::controlTimerCallbackImpl() {
   const builtin_interfaces__msg__Time stamp = nowRosTime();
   fillOdomMessage(stamp);
 
-  left_ticks_msg_.data = left_wheel_.ticks;
-  right_ticks_msg_.data = right_wheel_.ticks;
-  left_pwm_msg_.data = current_left_duty_;
-  right_pwm_msg_.data = current_right_duty_;
-  cmd_vel_echo_msg_ = target_cmd_;
-
   (void) rcl_publish(&odom_publisher_, &odom_msg_, nullptr);
-  (void) rcl_publish(&left_ticks_publisher_, &left_ticks_msg_, nullptr);
-  (void) rcl_publish(&right_ticks_publisher_, &right_ticks_msg_, nullptr);
-  (void) rcl_publish(&cmd_vel_echo_publisher_, &cmd_vel_echo_msg_, nullptr);
-  (void) rcl_publish(&left_pwm_publisher_, &left_pwm_msg_, nullptr);
-  (void) rcl_publish(&right_pwm_publisher_, &right_pwm_msg_, nullptr);
-
-  if (latest_imu_.valid) {
-    fillImuMessage(stamp);
-    (void) rcl_publish(&imu_publisher_, &imu_msg_, nullptr);
-  }
 }
 
 void RobotApp::updateAgentStateMachine() {
@@ -359,47 +343,11 @@ void RobotApp::fillOdomMessage(const builtin_interfaces__msg__Time &stamp) {
       (right_wheel_.velocity_mps - left_wheel_.velocity_mps) / TRACK_WIDTH_M;
 }
 
-void RobotApp::fillImuMessage(const builtin_interfaces__msg__Time &stamp) {
-  imu_msg_.header.stamp = stamp;
-  imu_msg_.angular_velocity.x = latest_imu_.gx;
-  imu_msg_.angular_velocity.y = latest_imu_.gy;
-  imu_msg_.angular_velocity.z = latest_imu_.gz;
-  imu_msg_.linear_acceleration.x = latest_imu_.ax;
-  imu_msg_.linear_acceleration.y = latest_imu_.ay;
-  imu_msg_.linear_acceleration.z = latest_imu_.az;
-
-  double cy = cos(latest_imu_.yaw * 0.5);
-  double sy = sin(latest_imu_.yaw * 0.5);
-  double cp = cos(latest_imu_.pitch * 0.5);
-  double sp = sin(latest_imu_.pitch * 0.5);
-  double cr = cos(latest_imu_.roll * 0.5);
-  double sr = sin(latest_imu_.roll * 0.5);
-
-  imu_msg_.orientation.w = cr * cp * cy + sr * sp * sy;
-  imu_msg_.orientation.x = sr * cp * cy - cr * sp * sy;
-  imu_msg_.orientation.y = cr * sp * cy + sr * cp * sy;
-  imu_msg_.orientation.z = cr * cp * sy - sr * sp * cy;
-}
-
 void RobotApp::initializeCovariances() {
-  for (size_t i = 0; i < 9; ++i) {
-    imu_msg_.orientation_covariance[i] = 0.0;
-    imu_msg_.angular_velocity_covariance[i] = 0.0;
-    imu_msg_.linear_acceleration_covariance[i] = 0.0;
-  }
-
   for (size_t i = 0; i < 36; ++i) {
     odom_msg_.pose.covariance[i] = 0.0;
     odom_msg_.twist.covariance[i] = 0.0;
   }
-
-  imu_msg_.orientation_covariance[0] = -1.0;
-  imu_msg_.angular_velocity_covariance[0] = 0.02;
-  imu_msg_.angular_velocity_covariance[4] = 0.02;
-  imu_msg_.angular_velocity_covariance[8] = 0.02;
-  imu_msg_.linear_acceleration_covariance[0] = 0.1;
-  imu_msg_.linear_acceleration_covariance[4] = 0.1;
-  imu_msg_.linear_acceleration_covariance[8] = 0.1;
 
   odom_msg_.pose.covariance[0] = 0.02;
   odom_msg_.pose.covariance[7] = 0.02;
@@ -417,25 +365,7 @@ bool RobotApp::initializeRosMessages() {
   if (!nav_msgs__msg__Odometry__init(&odom_msg_)) {
     return false;
   }
-  if (!sensor_msgs__msg__Imu__init(&imu_msg_)) {
-    return false;
-  }
-  if (!std_msgs__msg__Int32__init(&left_ticks_msg_)) {
-    return false;
-  }
-  if (!std_msgs__msg__Int32__init(&right_ticks_msg_)) {
-    return false;
-  }
-  if (!std_msgs__msg__Float32__init(&left_pwm_msg_)) {
-    return false;
-  }
-  if (!std_msgs__msg__Float32__init(&right_pwm_msg_)) {
-    return false;
-  }
   if (!geometry_msgs__msg__Twist__init(&cmd_vel_msg_)) {
-    return false;
-  }
-  if (!geometry_msgs__msg__Twist__init(&cmd_vel_echo_msg_)) {
     return false;
   }
   if (!geometry_msgs__msg__Twist__init(&target_cmd_)) {
@@ -446,9 +376,6 @@ bool RobotApp::initializeRosMessages() {
     return false;
   }
   if (!rosidl_runtime_c__String__assign(&odom_msg_.child_frame_id, BASE_FRAME)) {
-    return false;
-  }
-  if (!rosidl_runtime_c__String__assign(&imu_msg_.header.frame_id, IMU_FRAME)) {
     return false;
   }
 
@@ -471,42 +398,6 @@ bool RobotApp::createRosEntities() {
   if (rclc_publisher_init_default(
           &odom_publisher_, &node_,
           ROSIDL_GET_MSG_TYPE_SUPPORT(nav_msgs, msg, Odometry), ODOM_TOPIC) != RCL_RET_OK) {
-    return false;
-  }
-
-  if (rclc_publisher_init_default(
-          &imu_publisher_, &node_,
-          ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, Imu), IMU_TOPIC) != RCL_RET_OK) {
-    return false;
-  }
-
-  if (rclc_publisher_init_default(
-          &left_ticks_publisher_, &node_,
-          ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32), LEFT_TICKS_TOPIC) != RCL_RET_OK) {
-    return false;
-  }
-
-  if (rclc_publisher_init_default(
-          &right_ticks_publisher_, &node_,
-          ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32), RIGHT_TICKS_TOPIC) != RCL_RET_OK) {
-    return false;
-  }
-
-  if (rclc_publisher_init_default(
-          &cmd_vel_echo_publisher_, &node_,
-          ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist), CMD_VEL_ECHO_TOPIC) != RCL_RET_OK) {
-    return false;
-  }
-
-  if (rclc_publisher_init_default(
-          &left_pwm_publisher_, &node_,
-          ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32), LEFT_PWM_TOPIC) != RCL_RET_OK) {
-    return false;
-  }
-
-  if (rclc_publisher_init_default(
-          &right_pwm_publisher_, &node_,
-          ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32), RIGHT_PWM_TOPIC) != RCL_RET_OK) {
     return false;
   }
 
@@ -546,12 +437,6 @@ void RobotApp::destroyRosEntities() {
   }
 
   rcl_publisher_fini(&odom_publisher_, &node_);
-  rcl_publisher_fini(&imu_publisher_, &node_);
-  rcl_publisher_fini(&left_ticks_publisher_, &node_);
-  rcl_publisher_fini(&right_ticks_publisher_, &node_);
-  rcl_publisher_fini(&cmd_vel_echo_publisher_, &node_);
-  rcl_publisher_fini(&left_pwm_publisher_, &node_);
-  rcl_publisher_fini(&right_pwm_publisher_, &node_);
   rcl_subscription_fini(&cmd_vel_subscription_, &node_);
   rcl_timer_fini(&control_timer_);
   rclc_executor_fini(&executor_);

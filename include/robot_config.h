@@ -58,14 +58,7 @@ constexpr uint32_t IMU_I2C_FREQUENCY = 400000;
 constexpr char NODE_NAME[] = "esp32s3_base";
 constexpr char CMD_VEL_TOPIC[] = "cmd_vel";
 constexpr char ODOM_TOPIC[] = "odom";
-constexpr char IMU_TOPIC[] = "imu/data_raw";
-constexpr char LEFT_TICKS_TOPIC[] = "left_wheel/ticks";
-constexpr char RIGHT_TICKS_TOPIC[] = "right_wheel/ticks";
-constexpr char CMD_VEL_ECHO_TOPIC[] = "debug/cmd_vel_echo";
-constexpr char LEFT_PWM_TOPIC[] = "debug/left_pwm";
-constexpr char RIGHT_PWM_TOPIC[] = "debug/right_pwm";
 constexpr char ODOM_FRAME[] = "odom";
 constexpr char BASE_FRAME[] = "base_link";
-constexpr char IMU_FRAME[] = "imu_link";
 
 }  // namespace robot_config

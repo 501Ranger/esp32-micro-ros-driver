@@ -8,9 +8,6 @@
 #include <rcl/rcl.h>
 #include <rclc/executor.h>
 #include <rclc/rclc.h>
-#include <sensor_msgs/msg/imu.h>
-#include <std_msgs/msg/float32.h>
-#include <std_msgs/msg/int32.h>
 
 #include "encoder_reader.h"
 #include "motor_driver.h"
@@ -42,7 +39,6 @@ class RobotApp {
   void handleSerialCommands();
   void updateWheelMeasurements(float dt);
   void fillOdomMessage(const builtin_interfaces__msg__Time &stamp);
-  void fillImuMessage(const builtin_interfaces__msg__Time &stamp);
   void initializeCovariances();
   bool initializeRosMessages();
   bool createRosEntities();
@@ -67,22 +63,10 @@ class RobotApp {
   rcl_timer_t control_timer_;
   rclc_executor_t executor_;
   rcl_publisher_t odom_publisher_;
-  rcl_publisher_t imu_publisher_;
-  rcl_publisher_t left_ticks_publisher_;
-  rcl_publisher_t right_ticks_publisher_;
-  rcl_publisher_t cmd_vel_echo_publisher_;
-  rcl_publisher_t left_pwm_publisher_;
-  rcl_publisher_t right_pwm_publisher_;
   rcl_subscription_t cmd_vel_subscription_;
 
   geometry_msgs__msg__Twist cmd_vel_msg_;
   nav_msgs__msg__Odometry odom_msg_;
-  sensor_msgs__msg__Imu imu_msg_;
-  std_msgs__msg__Int32 left_ticks_msg_;
-  std_msgs__msg__Int32 right_ticks_msg_;
-  std_msgs__msg__Float32 left_pwm_msg_;
-  std_msgs__msg__Float32 right_pwm_msg_;
-  geometry_msgs__msg__Twist cmd_vel_echo_msg_;
   geometry_msgs__msg__Twist target_cmd_;
 
   AgentState agent_state_ = AgentState::WaitingAgent;
