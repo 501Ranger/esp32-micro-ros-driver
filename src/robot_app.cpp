@@ -36,6 +36,7 @@ void RobotApp::setup() {
   right_motor_.begin();
   setupSensors();
   setupTransport();
+  web_manager_.begin();
 
   (void) initializeRosMessages();
   imu_ready_ = imu_sensor_.begin();
@@ -68,6 +69,7 @@ void RobotApp::loop() {
 #endif
   handleSerialCommands();
   updateAgentStateMachine();
+  web_manager_.loop();
 }
 
 void RobotApp::handleSerialCommands() {
@@ -149,6 +151,13 @@ void RobotApp::controlTimerCallbackImpl() {
   if (now_ms - last_cmd_vel_ms_ > COMMAND_TIMEOUT_MS) {
     linear_command = 0.0f;
     angular_command = 0.0f;
+  }
+
+  // Web Joystick override (Highest Priority)
+  float web_lin, web_ang;
+  if (web_manager_.getVelocity(web_lin, web_ang)) {
+    linear_command = web_lin;
+    angular_command = web_ang;
   }
 
   const float half_track = TRACK_WIDTH_M * 0.5f;

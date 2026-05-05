@@ -15,6 +15,7 @@
 #include "qmi8658_sensor.h"
 #include "robot_config.h"
 #include "robot_types.h"
+#include "web_manager.h"
 
 namespace robot {
 
@@ -55,6 +56,7 @@ class RobotApp {
   QMI8658Sensor imu_sensor_;
   PidController left_pid_;
   PidController right_pid_;
+  WebManager web_manager_;
   HardwareSerial ros_serial_;
 
   rcl_allocator_t allocator_;

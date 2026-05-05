@@ -17,9 +17,14 @@ constexpr uint8_t M2_ENC_B = 13;
 constexpr uint8_t I2C_SDA = 35;
 constexpr uint8_t I2C_SCL = 36;
 
+constexpr uint8_t GAMEPAD_BUZZER_PIN = 38;
+constexpr uint8_t GAMEPAD_LED_PIN = 37;
+constexpr uint8_t GAMEPAD_BUTTON_PIN = 8;
+constexpr uint8_t BUZZER_PWM_CHANNEL = 4;
+
 constexpr uint8_t UART0_TX = 43;
 constexpr uint8_t UART0_RX = 44;
-constexpr uint32_t UART_BAUDRATE = 921600;
+constexpr uint32_t UART_BAUDRATE = 115200;
 
 constexpr bool LEFT_MOTOR_INVERTED = false;
 constexpr bool RIGHT_MOTOR_INVERTED = false;
