@@ -70,6 +70,14 @@ void RobotApp::loop() {
   handleSerialCommands();
   updateAgentStateMachine();
   web_manager_.loop();
+
+  // Run control loop manually if not connected to micro-ROS agent
+  if (agent_state_ != AgentState::AgentConnected) {
+    const unsigned long now = millis();
+    if (now - last_control_update_ms_ >= CONTROL_PERIOD_MS) {
+      controlTimerCallbackImpl();
+    }
+  }
 }
 
 void RobotApp::handleSerialCommands() {
@@ -156,13 +164,16 @@ void RobotApp::controlTimerCallbackImpl() {
   // Web Joystick override (Highest Priority)
   float web_lin, web_ang;
   if (web_manager_.getVelocity(web_lin, web_ang)) {
-    linear_command = web_lin;
-    angular_command = web_ang;
+    // web_lin/ang from web_manager are [-1.0, 1.0] scaled by fixed factors.
+    // We re-scale them to our configured closed-loop limits.
+    linear_command = web_lin * WEB_MAX_LINEAR_SPEED;
+    angular_command = (web_ang / 1.5f) * WEB_MAX_ANGULAR_SPEED;
   }
 
   const float half_track = TRACK_WIDTH_M * 0.5f;
   const float left_target = linear_command - angular_command * half_track;
   const float right_target = linear_command + angular_command * half_track;
+
   target_left_velocity_mps_ = left_target;
   target_right_velocity_mps_ = right_target;
   applyMotorCommand(left_target, right_target);
@@ -181,7 +192,9 @@ void RobotApp::controlTimerCallbackImpl() {
   const builtin_interfaces__msg__Time stamp = nowRosTime();
   fillOdomMessage(stamp);
 
-  (void) rcl_publish(&odom_publisher_, &odom_msg_, nullptr);
+  if (agent_state_ == AgentState::AgentConnected) {
+    (void) rcl_publish(&odom_publisher_, &odom_msg_, nullptr);
+  }
 }
 
 void RobotApp::updateAgentStateMachine() {
@@ -189,7 +202,12 @@ void RobotApp::updateAgentStateMachine() {
 
   switch (agent_state_) {
     case AgentState::WaitingAgent:
-      stopMotors();
+      {
+        float wl, wa;
+        if (!web_manager_.getVelocity(wl, wa)) {
+          stopMotors();
+        }
+      }
       if (now_ms - last_agent_check_ms_ > 500) {
         last_agent_check_ms_ = now_ms;
         if (rmw_uros_ping_agent(100, 1) == RMW_RET_OK) {

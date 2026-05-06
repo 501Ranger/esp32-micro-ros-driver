@@ -1,7 +1,10 @@
 #include "web_manager.h"
+#include "robot_config.h"
 #include <WiFi.h>
 
 namespace robot {
+
+using namespace robot_config;
 
 const char* INDEX_HTML PROGMEM = R"=====(
 <!DOCTYPE html>
@@ -197,6 +200,12 @@ WebManager::WebManager() : server_(80), ws_("/ws") {}
 WebManager::~WebManager() {}
 
 void WebManager::begin() {
+  pinMode(GAMEPAD_LED_PIN, OUTPUT);
+  digitalWrite(GAMEPAD_LED_PIN, HIGH);
+  ledcSetup(BUZZER_PWM_CHANNEL, 1000, 10);
+  ledcAttachPin(GAMEPAD_BUZZER_PIN, BUZZER_PWM_CHANNEL);
+  ledcWrite(BUZZER_PWM_CHANNEL, 0);
+
   ws_.onEvent([this](AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
     this->onWebSocketEvent(server, client, type, arg, data, len);
   });
@@ -220,8 +229,12 @@ void WebManager::loop() {
     linear_out_ = 0.0f;
     angular_out_ = 0.0f;
     is_active_ = false;
+#ifndef USE_SERIAL_TRANSPORT
     Serial.println("Web Joystick Timeout - Stopping");
+#endif
   }
+  
+  updateFeedback();
 }
 
 bool WebManager::getVelocity(float &linear_mps, float &angular_radps) const {
@@ -233,12 +246,23 @@ bool WebManager::getVelocity(float &linear_mps, float &angular_radps) const {
 void WebManager::onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, 
                                   AwsEventType type, void *arg, uint8_t *data, size_t len) {
   if (type == WS_EVT_CONNECT) {
+#ifndef USE_SERIAL_TRANSPORT
     Serial.printf("WS Client Connected: %u\n", client->id());
+#endif
+    connected_clients_++;
+    if (connected_clients_ == 1) {
+      playConnectSound();
+    }
   } else if (type == WS_EVT_DISCONNECT) {
+#ifndef USE_SERIAL_TRANSPORT
     Serial.printf("WS Client Disconnected: %u\n", client->id());
-    linear_out_ = 0.0f;
-    angular_out_ = 0.0f;
-    is_active_ = false;
+#endif
+    if (connected_clients_ > 0) connected_clients_--;
+    if (connected_clients_ == 0) {
+      linear_out_ = 0.0f;
+      angular_out_ = 0.0f;
+      is_active_ = false;
+    }
   } else if (type == WS_EVT_DATA) {
     handleWebSocketMessage(arg, data, len);
   }
@@ -247,19 +271,16 @@ void WebManager::onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *
 void WebManager::handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
   AwsFrameInfo *info = (AwsFrameInfo*)arg;
   if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
-    data[len] = 0; // Null-terminate just in case
-    
     StaticJsonDocument<200> doc;
-    DeserializationError error = deserializeJson(doc, (char*)data);
+    DeserializationError error = deserializeJson(doc, data, len);
     
     if (!error) {
       if (doc.containsKey("x") && doc.containsKey("y")) {
         float x = doc["x"];
         float y = doc["y"];
         
-        // Map stick values to physical velocities
-        // Max linear speed 1.0 m/s (forward/backward = y)
-        // Max angular speed 1.5 rad/s (left/right = x, invert x for standard Z axis rotation)
+        Serial.printf("Web Joystick: x=%.2f, y=%.2f\n", x, y);
+        
         linear_out_ = y * 1.0f;
         angular_out_ = -x * 1.5f;
         
@@ -274,6 +295,35 @@ void WebManager::handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
 #endif
     }
   }
+}
+
+void WebManager::updateFeedback() {
+  if (connected_clients_ == 0) {
+    digitalWrite(GAMEPAD_LED_PIN, HIGH); // Off
+  } else {
+    digitalWrite(GAMEPAD_LED_PIN, LOW); // On
+  }
+
+  if (current_tone_idx_ != -1) {
+    if (millis() - tone_start_ms_ > connect_sequence_[current_tone_idx_].duration_ms) {
+      current_tone_idx_++;
+      if (current_tone_idx_ >= 3) {
+        current_tone_idx_ = -1;
+        ledcWrite(BUZZER_PWM_CHANNEL, 0);
+      } else {
+        ledcWriteTone(BUZZER_PWM_CHANNEL, connect_sequence_[current_tone_idx_].frequency);
+        ledcWrite(BUZZER_PWM_CHANNEL, 512); // 50% duty cycle
+        tone_start_ms_ = millis();
+      }
+    }
+  }
+}
+
+void WebManager::playConnectSound() {
+  current_tone_idx_ = 0;
+  tone_start_ms_ = millis();
+  ledcWriteTone(BUZZER_PWM_CHANNEL, connect_sequence_[0].frequency);
+  ledcWrite(BUZZER_PWM_CHANNEL, 512);
 }
 
 }  // namespace robot

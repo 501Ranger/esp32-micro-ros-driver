@@ -24,7 +24,7 @@ constexpr uint8_t BUZZER_PWM_CHANNEL = 4;
 
 constexpr uint8_t UART0_TX = 43;
 constexpr uint8_t UART0_RX = 44;
-constexpr uint32_t UART_BAUDRATE = 115200;
+constexpr uint32_t UART_BAUDRATE = 921600;
 
 constexpr bool LEFT_MOTOR_INVERTED = false;
 constexpr bool RIGHT_MOTOR_INVERTED = false;
@@ -58,7 +58,10 @@ constexpr float DUTY_SLEW_RATE_PER_SEC = 6.0f;
 
 constexpr uint32_t CONTROL_PERIOD_MS = 20;
 constexpr uint32_t COMMAND_TIMEOUT_MS = 100;
+constexpr float WEB_MAX_LINEAR_SPEED = 0.50f;
+constexpr float WEB_MAX_ANGULAR_SPEED = 3.00f;
 constexpr uint32_t IMU_I2C_FREQUENCY = 400000;
+
 
 constexpr char NODE_NAME[] = "esp32s3_base";
 constexpr char CMD_VEL_TOPIC[] = "cmd_vel";
