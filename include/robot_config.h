@@ -26,6 +26,10 @@ constexpr uint8_t UART0_TX = 43;
 constexpr uint8_t UART0_RX = 44;
 constexpr uint32_t UART_BAUDRATE = 921600;
 
+constexpr char WIFI_SETUP_AP_SSID[] = "ESP32-Robot-Setup";
+constexpr char WIFI_SETUP_AP_PASSWORD[] = "12345678";
+constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 12000;
+
 constexpr bool LEFT_MOTOR_INVERTED = false;
 constexpr bool RIGHT_MOTOR_INVERTED = false;
 constexpr bool LEFT_ENCODER_INVERTED = true;

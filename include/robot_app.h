@@ -16,6 +16,7 @@
 #include "robot_config.h"
 #include "robot_types.h"
 #include "web_manager.h"
+#include "wifi_config_manager.h"
 
 namespace robot {
 
@@ -35,6 +36,9 @@ class RobotApp {
   void updateAgentStateMachine();
   void stopMotors();
   void setupTransport();
+  bool connectConfiguredWifi();
+  void startConfigPortal();
+  void startOta();
   void setupSensors();
   void applyMotorCommand(float left_velocity_mps, float right_velocity_mps);
   void handleSerialCommands();
@@ -57,7 +61,9 @@ class RobotApp {
   PidController left_pid_;
   PidController right_pid_;
   WebManager web_manager_;
+  WifiConfigManager wifi_config_manager_;
   HardwareSerial ros_serial_;
+  NetworkConfig network_config_;
 
   rcl_allocator_t allocator_;
   rclc_support_t support_;
@@ -76,6 +82,9 @@ class RobotApp {
   bool ros_messages_ready_ = false;
   bool time_synced_ = false;
   bool imu_ready_ = false;
+  bool wifi_ready_ = false;
+  bool transport_ready_ = false;
+  bool ota_started_ = false;
 
   WheelMeasurement left_wheel_;
   WheelMeasurement right_wheel_;

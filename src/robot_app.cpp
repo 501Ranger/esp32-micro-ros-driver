@@ -36,7 +36,7 @@ void RobotApp::setup() {
   right_motor_.begin();
   setupSensors();
   setupTransport();
-  web_manager_.begin();
+  web_manager_.begin(wifi_config_manager_);
 
   (void) initializeRosMessages();
   imu_ready_ = imu_sensor_.begin();
@@ -49,26 +49,20 @@ void RobotApp::setup() {
   last_cmd_vel_ms_ = millis();
   last_control_update_ms_ = millis();
 
-#ifdef USE_WIFI_TRANSPORT
-  ArduinoOTA.begin();
-#endif
+  startOta();
 }
 
 void RobotApp::loop() {
-#ifdef USE_WIFI_TRANSPORT
-  ArduinoOTA.handle();
-#else
-  static bool ota_started = false;
-  if (!ota_started && WiFi.status() == WL_CONNECTED) {
-    ArduinoOTA.begin();
-    ota_started = true;
+  if (!ota_started_) {
+    startOta();
   }
-  if (ota_started) {
+  if (ota_started_) {
     ArduinoOTA.handle();
   }
-#endif
   handleSerialCommands();
-  updateAgentStateMachine();
+  if (transport_ready_) {
+    updateAgentStateMachine();
+  }
   web_manager_.loop();
 
   // Run control loop manually if not connected to micro-ROS agent
@@ -256,16 +250,60 @@ void RobotApp::stopMotors() {
 }
 
 void RobotApp::setupTransport() {
+  wifi_config_manager_.begin();
+  network_config_ = wifi_config_manager_.load();
+  wifi_ready_ = connectConfiguredWifi();
+
 #ifdef USE_WIFI_TRANSPORT
   Serial.begin(UART_BAUDRATE, SERIAL_8N1, UART0_RX, UART0_TX);
-  IPAddress agent_ip;
-  agent_ip.fromString(AGENT_IP);
-  set_microros_wifi_transports(const_cast<char*>(WIFI_SSID), const_cast<char*>(WIFI_PASSWORD), agent_ip, AGENT_PORT);
+  if (wifi_ready_) {
+    IPAddress agent_ip;
+    agent_ip.fromString(network_config_.agent_ip);
+    set_microros_wifi_transports(const_cast<char*>(network_config_.ssid.c_str()),
+                                 const_cast<char*>(network_config_.password.c_str()),
+                                 agent_ip, network_config_.agent_port);
+    transport_ready_ = true;
+  }
 #else
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   ros_serial_.begin(UART_BAUDRATE, SERIAL_8N1, UART0_RX, UART0_TX);
   set_microros_serial_transports(ros_serial_);
+  transport_ready_ = true;
 #endif
+
+  if (!wifi_ready_) {
+    startConfigPortal();
+  }
+}
+
+bool RobotApp::connectConfiguredWifi() {
+  if (!network_config_.has_wifi) {
+    return false;
+  }
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(network_config_.ssid.c_str(), network_config_.password.c_str());
+
+  const unsigned long start_ms = millis();
+  while (WiFi.status() != WL_CONNECTED &&
+         millis() - start_ms < WIFI_CONNECT_TIMEOUT_MS) {
+    delay(250);
+  }
+
+  return WiFi.status() == WL_CONNECTED;
+}
+
+void RobotApp::startConfigPortal() {
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAP(WIFI_SETUP_AP_SSID, WIFI_SETUP_AP_PASSWORD);
+}
+
+void RobotApp::startOta() {
+  if (ota_started_ || WiFi.status() != WL_CONNECTED) {
+    return;
+  }
+
+  ArduinoOTA.begin();
+  ota_started_ = true;
 }
 
 void RobotApp::setupSensors() {

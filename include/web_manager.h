@@ -4,6 +4,8 @@
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 
+#include "wifi_config_manager.h"
+
 namespace robot {
 
 struct BuzzerTone {
@@ -16,7 +18,7 @@ class WebManager {
   WebManager();
   ~WebManager();
 
-  void begin();
+  void begin(WifiConfigManager &wifi_config_manager);
   void loop();
 
   // Get the current velocity commands from the web joystick
@@ -26,15 +28,20 @@ class WebManager {
   void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, 
                         AwsEventType type, void *arg, uint8_t *data, size_t len);
   void handleWebSocketMessage(void *arg, uint8_t *data, size_t len);
+  void handleWifiSave(AsyncWebServerRequest *request);
+  void handleWifiClear(AsyncWebServerRequest *request);
+  void sendWifiStatus(AsyncWebServerRequest *request);
   void playConnectSound();
   void updateFeedback();
 
   AsyncWebServer server_;
   AsyncWebSocket ws_;
+  WifiConfigManager *wifi_config_manager_ = nullptr;
 
   float linear_out_ = 0.0f;
   float angular_out_ = 0.0f;
   unsigned long last_command_ms_ = 0;
+  unsigned long restart_at_ms_ = 0;
   bool is_active_ = false;
   uint8_t connected_clients_ = 0;
 

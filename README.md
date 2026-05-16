@@ -19,14 +19,18 @@ esp32-micro-ros-driver/
 │   ├── qmi8658_sensor.h    # QMI8658 六轴 IMU 传感器驱动
 │   ├── robot_app.h         # micro-ROS 节点、发布者、订阅者应用逻辑
 │   ├── robot_config.h      # ⚠️ 机器人核心参数及硬件引脚配置文件
-│   └── robot_types.h       # 核心数据结构定义 (如状态机、传感器数据格式)
+│   ├── robot_types.h       # 核心数据结构定义 (如状态机、传感器数据格式)
+│   ├── web_manager.h       # 网页摇杆、WiFi 配网与 Web API
+│   └── wifi_config_manager.h # WiFi/Agent 配置的 Flash 持久化
 ├── src/                    # 源代码目录
 │   ├── encoder_reader.cpp
 │   ├── main.cpp            # 主入口，处理硬件初始化与 micro-ROS 状态机
 │   ├── motor_driver.cpp
 │   ├── pid_controller.cpp
 │   ├── qmi8658_sensor.cpp
-│   └── robot_app.cpp       # ROS 话题订阅(cmd_vel)与发布(odom, tf)的具体实现
+│   ├── robot_app.cpp       # ROS 话题订阅(cmd_vel)与发布(odom, tf)的具体实现
+│   ├── web_manager.cpp     # Web 服务、网页摇杆与配网接口
+│   └── wifi_config_manager.cpp # NVS Flash 配置读写
 └── platformio.ini          # ⚠️ PlatformIO 工程配置文件 (包含多环境编译配置)
 ```
 
@@ -38,6 +42,7 @@ esp32-micro-ros-driver/
   - **订阅** `cmd_vel` (`geometry_msgs/msg/Twist`)，接收上位机下发的速度和转向控制指令。
   - **发布** `odom` (`nav_msgs/msg/Odometry`)，向ROS 2网络提供基于轮式里程计的位置数据。
   - **发布** `/tf` 变换，发布 `odom` 到 `base_link` 的坐标系转换。
+- **网页摇杆遥控**：ESP32 内置 Web 控制页面，可通过手机或电脑浏览器访问设备 IP，使用虚拟摇杆直接控制机器人。网页摇杆指令优先级高于 ROS `cmd_vel`，松手或连接超时会自动停车。
 - **多途径通信与 OTA 支持**：支持通过 **USB串口** 或 **WiFi** 与上位机 (Agent) 进行连接，并支持 **OTA (空中升级)** 无线刷写固件，极大方便调试。
 
 ## 详细教程
@@ -49,16 +54,51 @@ esp32-micro-ros-driver/
 3. 克隆或下载本项目源码，使用 VSCode 打开 `esp32-micro-ros-driver` 文件夹。
 4. 等待 PlatformIO 自动加载项目并下载工具链。
 
-### 2. ⚠️ 核心配置修改 (`platformio.ini`)
-在编译和烧录固件之前，**必须根据你的实际网络和上位机环境修改 `platformio.ini` 中的各项数据**。
+### 2. WiFi 与 Agent 配置
+固件支持通过网页配置 WiFi，并将配置保存到 ESP32 的 NVS Flash 中。普通 USB 烧录或 OTA 更新固件不会清除这部分数据，因此后续升级后仍会自动使用上一次保存的 WiFi。
+
+首次启动或 WiFi 连接失败时，ESP32 会开启配置热点：
+
+```text
+SSID: ESP32-Robot-Setup
+密码: 12345678
+配置页: http://192.168.4.1/wifi
+```
+
+在配置页中填写：
+- WiFi SSID
+- WiFi 密码
+- micro-ROS Agent IP
+- micro-ROS Agent UDP 端口
+
+保存后设备会自动重启，并使用新配置连接局域网。连接成功后，访问设备的局域网 IP 仍可进入 `/wifi` 修改配置，也可以继续使用 OTA 无线烧录。
+
+#### 网页摇杆遥控
+当 ESP32 已连接到 WiFi，或设备处于首次配网/连接失败的配置热点模式时，都可以通过浏览器访问 Web 控制页面：
+
+```text
+摇杆页面: http://设备IP/
+配网页面: http://设备IP/wifi
+```
+
+如果设备处于配置热点模式，默认地址是：
+
+```text
+摇杆页面: http://192.168.4.1/
+配网页面: http://192.168.4.1/wifi
+```
+
+网页摇杆通过 WebSocket 以约 20Hz 发送速度指令。向上推动摇杆控制前进/后退，左右推动控制转向；松手后页面会立即发送零速度指令。若浏览器断开或一段时间没有收到摇杆数据，固件也会自动停车，避免机器人继续保持上一条运动指令。
+
+`platformio.ini` 中的 `build_flags` 仍可作为首次烧录的默认/fallback 配置；如果 Flash 中已经保存过网页配置，则优先使用 Flash 中的配置。
 
 打开项目根目录的 `platformio.ini`，找到 `build_flags` 部分：
 ```ini
 build_flags = 
-    -DWIFI_SSID=\"你的WiFi名称\"         # 若使用 WiFi 通信，填入所在局域网的 WiFi 名称
-    -DWIFI_PASSWORD=\"你的WiFi密码\"      # 对应的 WiFi 密码
-    -DAGENT_IP=\"192.168.10.198\"       # 运行 micro-ROS Agent 的上位机 IP 地址
-    -DAGENT_PORT=8888                   # 上位机 Agent 的端口号 (默认 UDP 8888)
+    -DWIFI_SSID=\"你的WiFi名称\"         # 可选：首次启动 fallback WiFi 名称
+    -DWIFI_PASSWORD=\"你的WiFi密码\"      # 可选：首次启动 fallback WiFi 密码
+    -DAGENT_IP=\"192.168.10.198\"       # 可选：fallback Agent IP
+    -DAGENT_PORT=8888                   # 可选：fallback Agent 端口
 ```
 > *注：除此之外，如果你的硬件引脚接线、电机参数（如轮径、编码器精度、减速比等）与默认值不一致，请在 `include/robot_config.h` 中进行相应的调整。*
 
@@ -100,3 +140,4 @@ default_envs = esp32-s3-serial  ; 例如：切换为普通串口通信+有线烧
    ros2 node list
    ```
    如果出现 `/esp32s3_base` 节点，则证明下位机已成功接入 ROS 2 系统！你可以开始监听 `/odom` 话题或下发 `/cmd_vel` 速度控制了。
+5. **网页遥控**：在手机或电脑浏览器中打开 `http://设备IP/`，即可使用网页摇杆临时接管底盘运动；停止操作或关闭页面后会自动停车。
