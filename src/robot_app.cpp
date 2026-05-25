@@ -259,9 +259,21 @@ void RobotApp::setupTransport() {
   if (wifi_ready_) {
     IPAddress agent_ip;
     agent_ip.fromString(network_config_.agent_ip);
-    set_microros_wifi_transports(const_cast<char*>(network_config_.ssid.c_str()),
-                                 const_cast<char*>(network_config_.password.c_str()),
-                                 agent_ip, network_config_.agent_port);
+    
+    // Register the custom transport directly without calling set_microros_wifi_transports,
+    // which would call WiFi.begin again and disrupt the connection.
+    static struct micro_ros_agent_locator locator;
+    locator.address = agent_ip;
+    locator.port = network_config_.agent_port;
+
+    rmw_uros_set_custom_transport(
+        false,
+        (void *) &locator,
+        platformio_transport_open,
+        platformio_transport_close,
+        platformio_transport_write,
+        platformio_transport_read
+    );
     transport_ready_ = true;
   }
 #else
@@ -271,6 +283,7 @@ void RobotApp::setupTransport() {
 #endif
 
   if (!wifi_ready_) {
+    WiFi.disconnect(); // Stop background reconnection scans to keep Soft AP responsive
     startConfigPortal();
   }
 }
@@ -281,6 +294,8 @@ bool RobotApp::connectConfiguredWifi() {
   }
 
   WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+  WiFi.setSleep(false); // Disable WiFi power save to prevent disconnects on mobile hotspots
   WiFi.begin(network_config_.ssid.c_str(), network_config_.password.c_str());
 
   const unsigned long start_ms = millis();
@@ -293,8 +308,9 @@ bool RobotApp::connectConfiguredWifi() {
 }
 
 void RobotApp::startConfigPortal() {
-  WiFi.mode(WIFI_AP_STA);
+  WiFi.mode(WIFI_AP); // Use pure AP mode to prevent background STA scanning from degrading the AP
   WiFi.softAP(WIFI_SETUP_AP_SSID, WIFI_SETUP_AP_PASSWORD);
+  WiFi.setSleep(false); // Disable sleep for AP mode as well
 }
 
 void RobotApp::startOta() {

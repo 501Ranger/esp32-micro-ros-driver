@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
+#include <ESPmDNS.h>
+#include <NetBIOS.h>
 
 #include "wifi_config_manager.h"
 
