@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <Preferences.h>
+#include <vector>
 
 namespace robot {
 
@@ -20,6 +21,12 @@ class WifiConfigManager {
   NetworkConfig load() const;
   bool save(const NetworkConfig &config);
   bool clear();
+
+  // History config management
+  std::vector<NetworkConfig> getHistory() const;
+  bool saveHistory(const std::vector<NetworkConfig> &history);
+  bool addToHistory(const NetworkConfig &config);
+  bool deleteFromHistory(size_t index);
 
  private:
   mutable Preferences preferences_;

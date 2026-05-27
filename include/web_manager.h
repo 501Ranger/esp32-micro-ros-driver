@@ -32,6 +32,8 @@ class WebManager {
   void handleWebSocketMessage(void *arg, uint8_t *data, size_t len);
   void handleWifiSave(AsyncWebServerRequest *request);
   void handleWifiClear(AsyncWebServerRequest *request);
+  void handleWifiHistoryGet(AsyncWebServerRequest *request);
+  void handleWifiHistoryDelete(AsyncWebServerRequest *request);
   void sendWifiStatus(AsyncWebServerRequest *request);
   void playConnectSound();
   void updateFeedback();

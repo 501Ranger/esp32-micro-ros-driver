@@ -983,20 +983,22 @@ const char* WIFI_HTML PROGMEM = R"=====(
     const agentIpInput = document.getElementById('agent_ip');
     const agentPortInput = document.getElementById('agent_port');
 
-    const STORAGE_KEY = 'robot_wifi_history';
     const MAX_HISTORY = 5;
 
-    function getHistory() {
-      const data = localStorage.getItem(STORAGE_KEY);
-      return data ? JSON.parse(data) : [];
+    async function getHistoryFromServer() {
+      try {
+        const res = await fetch('/api/wifi/history');
+        if (res.status === 200) {
+          return await res.json();
+        }
+      } catch (err) {
+        console.error('Failed to fetch history', err);
+      }
+      return [];
     }
 
-    function saveHistory(history) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
-    }
-
-    function renderHistory() {
-      const history = getHistory();
+    async function renderHistory() {
+      const history = await getHistoryFromServer();
       historyCountEl.innerText = `${history.length}/${MAX_HISTORY}`;
       
       if (history.length === 0) {
@@ -1035,28 +1037,26 @@ const char* WIFI_HTML PROGMEM = R"=====(
         });
         
         const deleteBtn = itemEl.querySelector('.btn-delete');
-        deleteBtn.addEventListener('click', (e) => {
+        deleteBtn.addEventListener('click', async (e) => {
           e.stopPropagation();
-          let history = getHistory();
-          history.splice(index, 1);
-          saveHistory(history);
-          renderHistory();
-          showMsg('已删除配置记录', 'success');
+          showMsg('正在删除历史记录...', 'success');
+          try {
+            const body = new URLSearchParams();
+            body.append('index', index);
+            const res = await fetch('/api/wifi/history/delete', { method: 'POST', body });
+            if (res.status === 200) {
+              await renderHistory();
+              showMsg('已删除配置记录', 'success');
+            } else {
+              showMsg('删除历史记录失败: ' + await res.text(), 'error');
+            }
+          } catch (err) {
+            showMsg('网络请求失败', 'error');
+          }
         });
         
         historyListEl.appendChild(itemEl);
       });
-    }
-
-    function addToHistory(ssid, password, agent_ip, agent_port) {
-      let history = getHistory();
-      history = history.filter(item => item.ssid !== ssid);
-      history.unshift({ ssid, password, agent_ip, agent_port });
-      if (history.length > MAX_HISTORY) {
-        history = history.slice(0, MAX_HISTORY);
-      }
-      saveHistory(history);
-      renderHistory();
     }
 
     function showMsg(text, type) {
@@ -1084,13 +1084,6 @@ const char* WIFI_HTML PROGMEM = R"=====(
 
     document.getElementById('form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const ssid = ssidInput.value;
-      const password = passwordInput.value;
-      const agent_ip = agentIpInput.value;
-      const agent_port = agentPortInput.value;
-      
-      addToHistory(ssid, password, agent_ip, agent_port);
-
       showMsg('正在发送保存配置请求...', 'success');
       const body = new URLSearchParams(new FormData(e.target));
       try {
@@ -1098,6 +1091,7 @@ const char* WIFI_HTML PROGMEM = R"=====(
         const responseText = await res.text();
         if (res.status === 200) {
           showMsg(responseText, 'success');
+          await renderHistory();
         } else {
           showMsg('保存失败: ' + responseText, 'error');
         }
@@ -1151,11 +1145,17 @@ void WebManager::begin(WifiConfigManager &wifi_config_manager) {
   server_.on("/api/wifi/status", HTTP_GET, [this](AsyncWebServerRequest *request){
     this->sendWifiStatus(request);
   });
-  server_.on("/api/wifi", HTTP_POST, [this](AsyncWebServerRequest *request){
-    this->handleWifiSave(request);
-  });
   server_.on("/api/wifi/clear", HTTP_POST, [this](AsyncWebServerRequest *request){
     this->handleWifiClear(request);
+  });
+  server_.on("/api/wifi/history", HTTP_GET, [this](AsyncWebServerRequest *request){
+    this->handleWifiHistoryGet(request);
+  });
+  server_.on("/api/wifi/history/delete", HTTP_POST, [this](AsyncWebServerRequest *request){
+    this->handleWifiHistoryDelete(request);
+  });
+  server_.on("/api/wifi", HTTP_POST, [this](AsyncWebServerRequest *request){
+    this->handleWifiSave(request);
   });
 
   server_.begin();
@@ -1315,6 +1315,8 @@ void WebManager::handleWifiSave(AsyncWebServerRequest *request) {
     return;
   }
 
+  wifi_config_manager_->addToHistory(config);
+
   restart_at_ms_ = millis() + 1200;
   request->send(200, "text/plain", "Saved. The robot will restart and connect with the new settings.");
 }
@@ -1332,6 +1334,54 @@ void WebManager::handleWifiClear(AsyncWebServerRequest *request) {
 
   restart_at_ms_ = millis() + 1200;
   request->send(200, "text/plain", "Cleared. The robot will restart and use the built-in fallback settings.");
+}
+
+void WebManager::handleWifiHistoryGet(AsyncWebServerRequest *request) {
+  if (wifi_config_manager_ == nullptr) {
+    request->send(500, "text/plain", "WiFi config manager is not ready");
+    return;
+  }
+
+  std::vector<NetworkConfig> history = wifi_config_manager_->getHistory();
+
+  StaticJsonDocument<1024> doc;
+  JsonArray arr = doc.to<JsonArray>();
+  for (const auto &item : history) {
+    JsonObject obj = arr.createNestedObject();
+    obj["ssid"] = item.ssid;
+    obj["password"] = item.password;
+    obj["agent_ip"] = item.agent_ip;
+    obj["agent_port"] = item.agent_port;
+  }
+
+  String output;
+  serializeJson(doc, output);
+  request->send(200, "application/json", output);
+}
+
+void WebManager::handleWifiHistoryDelete(AsyncWebServerRequest *request) {
+  if (wifi_config_manager_ == nullptr) {
+    request->send(500, "text/plain", "WiFi config manager is not ready");
+    return;
+  }
+
+  if (!request->hasParam("index", true)) {
+    request->send(400, "text/plain", "Missing index parameter");
+    return;
+  }
+
+  int index = request->getParam("index", true)->value().toInt();
+  if (index < 0) {
+    request->send(400, "text/plain", "Invalid index");
+    return;
+  }
+
+  if (!wifi_config_manager_->deleteFromHistory(static_cast<size_t>(index))) {
+    request->send(500, "text/plain", "Failed to delete history item");
+    return;
+  }
+
+  request->send(200, "text/plain", "Deleted successfully");
 }
 
 void WebManager::sendWifiStatus(AsyncWebServerRequest *request) {
