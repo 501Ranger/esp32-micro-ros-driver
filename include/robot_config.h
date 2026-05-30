@@ -66,10 +66,18 @@ constexpr float WEB_MAX_LINEAR_SPEED = 0.50f;
 constexpr float WEB_MAX_ANGULAR_SPEED = 3.00f;
 constexpr uint32_t IMU_I2C_FREQUENCY = 400000;
 
+// Battery monitor configuration
+constexpr uint8_t BATTERY_ADC_PIN = 18;
+constexpr uint8_t LOW_BATTERY_LED_PIN = 39;
+constexpr float BATTERY_VOLTAGE_DIVIDER_RATIO = (100.0f + 30.0f) / 30.0f; // 4.3333f
+constexpr float LOW_BATTERY_THRESHOLD_V = 10.5f;
+constexpr float BATTERY_MAX_V = 12.6f;
+constexpr float BATTERY_MIN_V = 10.0f;
 
 constexpr char NODE_NAME[] = "esp32s3_base";
 constexpr char CMD_VEL_TOPIC[] = "cmd_vel";
 constexpr char ODOM_TOPIC[] = "odom";
+constexpr char BATTERY_TOPIC[] = "battery_state";
 constexpr char ODOM_FRAME[] = "odom";
 constexpr char BASE_FRAME[] = "base_link";
 

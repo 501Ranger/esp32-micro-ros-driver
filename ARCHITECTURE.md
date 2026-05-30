@@ -17,6 +17,7 @@ esp32-micro-ros-driver/
 │   ├── robot_config.h       # 机器人硬件引脚及物理参数配置
 │   ├── robot_types.h        # 核心数据结构与状态定义
 │   ├── web_manager.h        # Web 服务、网页摇杆与配网接口
+│   ├── web_pages.h          # 网页 HTML/CSS/JS 静态资源数据
 │   └── wifi_config_manager.h# NVS Flash 配置读写与持久化
 ├── src/                     # 源代码目录
 │   ├── encoder_reader.cpp
@@ -76,6 +77,8 @@ esp32-micro-ros-driver/
         3.  **安全急停 (E-Stop)**：网页端包含醒目的紧急制动按钮，按下后立即断开输出并锁定电机，摇杆输入失效；通信丢失时也会自动触发安全停车。
         4.  **局域网本地解析**：注册 mDNS (`esp32robot.local`) 和 NetBIOS (`esp32robot`)，无需记录 IP 即可直接在浏览器访问。
         5.  **OTA 空中固件升级**：支持通过局域网以无线方式更新固件。
+*   **[web_pages.h](file:///home/ranger/esp32-micro-ros-driver/include/web_pages.h)**
+    *   **作用**：存放网页控制终端（`INDEX_HTML`）和配置门户（`WIFI_HTML`）的静态 HTML/CSS/JS 原始字符串定义，从 C++ 业务逻辑中剥离以提高代码可维护性。
 *   **[wifi_config_manager.h](file:///home/ranger/esp32-micro-ros-driver/include/wifi_config_manager.h)** / **[wifi_config_manager.cpp](file:///home/ranger/esp32-micro-ros-driver/src/wifi_config_manager.cpp)**
     *   **作用**：配置持久化管理器。使用 ESP32 专有的 NVS (Non-Volatile Storage) 读写接口，安全地将配置的 WiFi SSID、密码及 micro-ROS Agent IP、Port 存储在 Flash 中，断电不丢失。
 

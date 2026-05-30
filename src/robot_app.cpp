@@ -36,6 +36,12 @@ void RobotApp::setup() {
   right_motor_.begin();
   setupSensors();
   setupTransport();
+  
+  // Initialize Battery Monitor
+  pinMode(BATTERY_ADC_PIN, INPUT);
+  pinMode(LOW_BATTERY_LED_PIN, OUTPUT);
+  digitalWrite(LOW_BATTERY_LED_PIN, HIGH); // Default off (active-low LED)
+
   web_manager_.begin(wifi_config_manager_);
 
   (void) initializeRosMessages();
@@ -64,6 +70,11 @@ void RobotApp::loop() {
     updateAgentStateMachine();
   }
   web_manager_.loop();
+
+  // Periodically check battery status (every 1s)
+  if (millis() - last_battery_update_ms_ >= 1000) {
+    updateBattery();
+  }
 
   // Run control loop manually if not connected to micro-ROS agent
   if (agent_state_ != AgentState::AgentConnected) {
@@ -452,6 +463,9 @@ bool RobotApp::initializeRosMessages() {
   if (!geometry_msgs__msg__Twist__init(&target_cmd_)) {
     return false;
   }
+  if (!sensor_msgs__msg__BatteryState__init(&battery_msg_)) {
+    return false;
+  }
 
   if (!rosidl_runtime_c__String__assign(&odom_msg_.header.frame_id, ODOM_FRAME)) {
     return false;
@@ -459,6 +473,20 @@ bool RobotApp::initializeRosMessages() {
   if (!rosidl_runtime_c__String__assign(&odom_msg_.child_frame_id, BASE_FRAME)) {
     return false;
   }
+  if (!rosidl_runtime_c__String__assign(&battery_msg_.header.frame_id, BASE_FRAME)) {
+    return false;
+  }
+
+  // Set static fields for BatteryState message
+  battery_msg_.present = true;
+  battery_msg_.power_supply_status = 2; // POWER_SUPPLY_STATUS_DISCHARGING
+  battery_msg_.power_supply_health = 0; // POWER_SUPPLY_HEALTH_UNKNOWN
+  battery_msg_.power_supply_technology = 0; // POWER_SUPPLY_TECHNOLOGY_UNKNOWN
+  battery_msg_.temperature = NAN;
+  battery_msg_.current = NAN;
+  battery_msg_.charge = NAN;
+  battery_msg_.capacity = NAN;
+  battery_msg_.design_capacity = NAN;
 
   initializeCovariances();
   ros_messages_ready_ = true;
@@ -479,6 +507,12 @@ bool RobotApp::createRosEntities() {
   if (rclc_publisher_init_default(
           &odom_publisher_, &node_,
           ROSIDL_GET_MSG_TYPE_SUPPORT(nav_msgs, msg, Odometry), ODOM_TOPIC) != RCL_RET_OK) {
+    return false;
+  }
+
+  if (rclc_publisher_init_default(
+          &battery_publisher_, &node_,
+          ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, BatteryState), BATTERY_TOPIC) != RCL_RET_OK) {
     return false;
   }
 
@@ -518,6 +552,7 @@ void RobotApp::destroyRosEntities() {
   }
 
   rcl_publisher_fini(&odom_publisher_, &node_);
+  rcl_publisher_fini(&battery_publisher_, &node_);
   rcl_subscription_fini(&cmd_vel_subscription_, &node_);
   rcl_timer_fini(&control_timer_);
   rclc_executor_fini(&executor_);
@@ -553,6 +588,41 @@ void RobotApp::setQuaternionFromYaw(double yaw, geometry_msgs__msg__Quaternion &
   quat.y = 0.0;
   quat.z = sin(yaw * 0.5);
   quat.w = cos(yaw * 0.5);
+}
+
+void RobotApp::updateBattery() {
+  last_battery_update_ms_ = millis();
+
+  // Read voltage in mV from ESP32 ADC
+  uint32_t pin_mv = analogReadMilliVolts(BATTERY_ADC_PIN);
+  
+  // Calculate battery voltage based on voltage divider
+  float raw_v = (static_cast<float>(pin_mv) / 1000.0f) * BATTERY_VOLTAGE_DIVIDER_RATIO;
+  
+  // Software Exponential Moving Average (EMA) low-pass filter to smooth out noise
+  battery_voltage_ = battery_voltage_ * 0.9f + raw_v * 0.1f;
+  
+  // Map voltage to percentage [10.0V, 12.6V] -> [0, 100]
+  float pct = (battery_voltage_ - BATTERY_MIN_V) / (BATTERY_MAX_V - BATTERY_MIN_V) * 100.0f;
+  battery_percentage_ = constrain(static_cast<int>(pct), 0, 100);
+
+  // Active-Low Low Battery alert LED
+  if (battery_voltage_ < LOW_BATTERY_THRESHOLD_V) {
+    digitalWrite(LOW_BATTERY_LED_PIN, LOW); // Turn on alert LED
+  } else {
+    digitalWrite(LOW_BATTERY_LED_PIN, HIGH); // Turn off alert LED
+  }
+
+  // Update WebManager battery status
+  web_manager_.setBatteryStatus(battery_voltage_, battery_percentage_);
+
+  // Publish to ROS 2 battery state topic
+  if (agent_state_ == AgentState::AgentConnected) {
+    battery_msg_.header.stamp = nowRosTime();
+    battery_msg_.voltage = battery_voltage_;
+    battery_msg_.percentage = static_cast<float>(battery_percentage_) / 100.0f;
+    (void) rcl_publish(&battery_publisher_, &battery_msg_, nullptr);
+  }
 }
 
 }  // namespace robot

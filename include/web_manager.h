@@ -26,6 +26,9 @@ class WebManager {
   // Get the current velocity commands from the web joystick
   bool getVelocity(float &linear_mps, float &angular_radps) const;
 
+  // Set the current battery status to broadcast to web clients
+  void setBatteryStatus(float voltage, int percentage);
+
  private:
   void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, 
                         AwsEventType type, void *arg, uint8_t *data, size_t len);
@@ -48,6 +51,11 @@ class WebManager {
   unsigned long restart_at_ms_ = 0;
   bool is_active_ = false;
   uint8_t connected_clients_ = 0;
+
+  // Battery monitoring
+  float battery_voltage_ = 12.0f;
+  int battery_percentage_ = 100;
+  unsigned long last_status_broadcast_ms_ = 0;
 
   // Buzzer sequence
   const BuzzerTone connect_sequence_[3] = {

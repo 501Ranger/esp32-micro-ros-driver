@@ -5,6 +5,7 @@
 #include <builtin_interfaces/msg/time.h>
 #include <geometry_msgs/msg/twist.h>
 #include <nav_msgs/msg/odometry.h>
+#include <sensor_msgs/msg/battery_state.h>
 #include <rcl/rcl.h>
 #include <rclc/executor.h>
 #include <rclc/rclc.h>
@@ -40,6 +41,7 @@ class RobotApp {
   void startConfigPortal();
   void startOta();
   void setupSensors();
+  void updateBattery();
   void applyMotorCommand(float left_velocity_mps, float right_velocity_mps);
   void handleSerialCommands();
   void updateWheelMeasurements(float dt);
@@ -71,10 +73,12 @@ class RobotApp {
   rcl_timer_t control_timer_;
   rclc_executor_t executor_;
   rcl_publisher_t odom_publisher_;
+  rcl_publisher_t battery_publisher_;
   rcl_subscription_t cmd_vel_subscription_;
 
   geometry_msgs__msg__Twist cmd_vel_msg_;
   nav_msgs__msg__Odometry odom_msg_;
+  sensor_msgs__msg__BatteryState battery_msg_;
   geometry_msgs__msg__Twist target_cmd_;
 
   AgentState agent_state_ = AgentState::WaitingAgent;
@@ -101,6 +105,11 @@ class RobotApp {
   float current_right_duty_ = 0.0f;
   float target_left_velocity_mps_ = 0.0f;
   float target_right_velocity_mps_ = 0.0f;
+
+  // Battery monitoring
+  float battery_voltage_ = 12.0f;
+  int battery_percentage_ = 100;
+  unsigned long last_battery_update_ms_ = 0;
 
   // Dynamic tuning parameters
   float kp_ = robot_config::MOTOR_PID_KP;
