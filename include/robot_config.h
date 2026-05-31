@@ -24,7 +24,18 @@ constexpr uint8_t BUZZER_PWM_CHANNEL = 4;
 
 constexpr uint8_t UART0_TX = 43;
 constexpr uint8_t UART0_RX = 44;
+constexpr uint8_t UART1_RX = 15;
+constexpr uint8_t UART1_TX = 16;
 constexpr uint32_t UART_BAUDRATE = 921600;
+
+// New unused serial port configuration
+constexpr uint8_t NEW_SERIAL_TX = 1;
+constexpr uint8_t NEW_SERIAL_RX = 2;
+constexpr uint32_t NEW_SERIAL_BAUDRATE = 115200;
+
+// New unused CAN port configuration (ESP32 TWAI)
+constexpr uint8_t CAN_TX_PIN = 6;
+constexpr uint8_t CAN_RX_PIN = 7;
 
 constexpr char WIFI_SETUP_AP_SSID[] = "ESP32-Robot-Setup";
 constexpr char WIFI_SETUP_AP_PASSWORD[] = "12345678";

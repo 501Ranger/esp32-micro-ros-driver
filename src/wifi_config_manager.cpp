@@ -39,6 +39,7 @@ NetworkConfig WifiConfigManager::load() const {
   config.password = preferences_.getString(KEY_PASSWORD, "");
   config.agent_ip = preferences_.getString(KEY_AGENT_IP, "");
   config.agent_port = preferences_.getUShort(KEY_AGENT_PORT, AGENT_PORT);
+  config.vofa_debug = preferences_.getBool("vofa_dbg", false);
   config.loaded_from_flash = config.ssid.length() > 0;
 
   if (config.ssid.length() == 0) {
@@ -65,6 +66,7 @@ bool WifiConfigManager::save(const NetworkConfig &config) {
   preferences_.putString(KEY_PASSWORD, config.password);
   ok = (preferences_.putString(KEY_AGENT_IP, config.agent_ip) > 0) && ok;
   ok = (preferences_.putUShort(KEY_AGENT_PORT, config.agent_port) > 0) && ok;
+  ok = preferences_.putBool("vofa_dbg", config.vofa_debug) && ok;
   return ok;
 }
 

@@ -50,7 +50,7 @@ esp32-micro-ros-driver/
     *   **主要职责**：
         1.  管理 micro-ROS Agent 的连接状态机 (`AgentState`)，处理连接断开与自动重连。
         2.  负责 micro-ROS 节点、发布者 (`odom`、`/tf`)、订阅者 (`cmd_vel`) 和定时器的生命周期（创建与销毁）。
-        3.  执行核心控制定时器回调（通常为 50Hz/20ms 周期），在回调中读取编码器、运行 PID 速度环控制电机、计算轮式里程计并发布数据。
+        3.  执行核心控制定时器回调（通常为 50Hz/20ms 周期），在回调中读取编码器、运行 PID 速度环控制电机、计算轮式里程计并发布数据.
         4.  支持动态参数调整，如在线调整 PID 参数。
 
 ### 2.2 驱动与控制层
@@ -73,10 +73,12 @@ esp32-micro-ros-driver/
     *   **作用**：提供直观的本地 Web 控制面板和远程配网服务。
     *   **功能**：
         1.  **WiFi AP 配网门户**：连接失败或首次启动时开启 AP 热点，提供网页配置页面以设定 WiFi SSID、密码和 Agent 终结点。
-        2.  **科技感 Web 控制端**：提供 HTML5 网页虚拟摇杆，通过 WebSocket 协议以约 20Hz 频率实时下发速度指令。
-        3.  **安全急停 (E-Stop)**：网页端包含醒目的紧急制动按钮，按下后立即断开输出并锁定电机，摇杆输入失效；通信丢失时也会自动触发安全停车。
-        4.  **局域网本地解析**：注册 mDNS (`esp32robot.local`) 和 NetBIOS (`esp32robot`)，无需记录 IP 即可直接在浏览器访问。
-        5.  **OTA 空中固件升级**：支持通过局域网以无线方式更新固件。
+        2.  **科技感 Web 控制端**：提供 HTML5 网页虚拟摇杆，通过 WebSocket 协议以约 20Hz 频率实时下发速度指令（已彻底移除串口的摇杆坐标日志打印，杜绝任何对 micro-ROS 串口数据流的污染风险）。
+        3.  **多维度系统状态监控**：扩展 WebSocket 单向广播，除电压和电量外，还能在网页端实时展示 micro-ROS Agent 连接状态、Wi-Fi RSSI 信号强度以及左右轮目标速度与测量速度等丰富信息。
+        4.  **VOFA+ 调试持久化配置**：移除了主页的调试开关，将其整合到配置页面 (`WIFI_HTML`) 的表单中。支持保存到 NVS (Flash) 中以实现断电持久化（机器人每次开机均根据配置值决定是否输出 VOFA+ 流）。同时，串口 CLI（输入 `v:1` 或 `v:0`）依然支持动态开关输出，方便调试。
+        5.  **安全急停 (E-Stop)**：网页端包含醒目的紧急制动按钮，按下后立即断开输出并锁定电机，摇杆输入失效；通信丢失时也会自动触发安全停车。
+        6.  **局域网本地解析**：注册 mDNS (`esp32robot.local`) 和 NetBIOS (`esp32robot`)，无需记录 IP 即可直接在浏览器访问。
+        7.  **OTA 空中固件升级**：支持通过局域网以无线方式更新固件。
 *   **[web_pages.h](file:///home/ranger/esp32-micro-ros-driver/include/web_pages.h)**
     *   **作用**：存放网页控制终端（`INDEX_HTML`）和配置门户（`WIFI_HTML`）的静态 HTML/CSS/JS 原始字符串定义，从 C++ 业务逻辑中剥离以提高代码可维护性。
 *   **[wifi_config_manager.h](file:///home/ranger/esp32-micro-ros-driver/include/wifi_config_manager.h)** / **[wifi_config_manager.cpp](file:///home/ranger/esp32-micro-ros-driver/src/wifi_config_manager.cpp)**
@@ -85,9 +87,9 @@ esp32-micro-ros-driver/
 ### 2.5 配置与核心类型
 
 *   **[robot_config.h](file:///home/ranger/esp32-micro-ros-driver/include/robot_config.h)**
-    *   **作用**：定义机器人全局静态常量与出厂默认参数。包括引脚分配、LEDC PWM 频率及位数、物理结构参数（轮径、轴距、编码器线数）、PID 控制周期、超时阈值、以及默认的 ROS 话题名称和框架名称。
+    *   **作用**：定义机器人全局静态常量与出厂默认参数。包括引脚分配（已将 Serial1 调试引脚配置化为 `UART1_RX` / `UART1_TX` 统一管理）、LEDC PWM 频率及位数、物理结构参数（轮径、轴距、编码器线数）、PID 控制周期、超时阈值、以及默认的 ROS 话题名称和框架名称。此外，还包含了新 Serial2（TX=IO1, RX=IO2）和 CAN 接口（TX=IO6, RX=IO7）的引脚常量。
 *   **[robot_types.h](file:///home/ranger/esp32-micro-ros-driver/include/robot_types.h)**
-    *   **作用**：统一定义系统中使用的数据结构（如 IMU 采样数据结构 `ImuSample`、轮子测量结构 `WheelMeasurement`、网络配置结构 `NetworkConfig`）以及 micro-ROS 状态机枚举 `AgentState`。
+    *   **作用**：统一定义系统中使用的数据结构（如 IMU 采样数据结构 `ImuSample`、轮子测量结构 `WheelMeasurement`、网络配置结构 `NetworkConfig`、用以传递系统详细状态的 `SystemStatus` 结构体）以及 micro-ROS 状态机枚举 `AgentState`。
 
 ---
 
@@ -100,9 +102,10 @@ graph TD
     B --> C[读取 Flash 存储的 WiFi & Agent 配置]
     C --> D[初始化 I2C / IMU 传感器]
     D --> E[初始化电机与编码器 GPIO/LEDC/中断]
-    E --> F{尝试连接保存的 WiFi}
-    F -- 成功 --> G[注册 Web 控制服务 & mDNS / 准备连接 micro-ROS Agent]
-    F -- 失败 --> H[开启 ESP32-Robot-Setup 配置热点 & 启动网页配置门户]
+    E --> F[初始化 Serial2 串口与 CAN TWAI 总线外设]
+    F --> G{尝试连接保存的 WiFi}
+    G -- 成功 --> H[注册 Web 控制服务 & mDNS / 准备连接 micro-ROS Agent]
+    G -- 失败 --> I[开启 ESP32-Robot-Setup 配置热点 & 启动网页配置门户]
 ```
 
 ### 3.2 运行控制循环 (Control & Odom Loop)
@@ -111,6 +114,7 @@ graph TD
 2.  **闭环计算**：将当前轮速与目标轮速输入到左、右 PID 控制器，计算输出值，并将其转换为高频 PWM 占空比作用于电机。
 3.  **里程计积分**：利用两轮差速运动学模型对轮速进行时间积分，实时更新机器人在里程计坐标系下的二维位姿 $(x, y, \theta)$。
 4.  **ROS 消息发布**：若 micro-ROS 连接正常，将位姿信息和当前的线速度/角速度填充进 `nav_msgs/msg/Odometry` 消息，并向 `/odom` 和 `/tf` 话题发布。
+5.  **VOFA+ 调试波形输出**：若由 Web 端或串口开启了 VOFA+ 调试，会在循环周期末尾往 `Serial1` 写入实时的 JustFloat 数据帧（包含左右轮目标速度及测量速度），以供上位机调试分析。
 
 ### 3.3 控制权仲裁 (Command Precedence)
 机器人的移动控制支持两个来源，其优先级与切换逻辑如下：

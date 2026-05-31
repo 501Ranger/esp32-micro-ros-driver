@@ -41,6 +41,7 @@ class RobotApp {
   void startConfigPortal();
   void startOta();
   void setupSensors();
+  void setupCAN();
   void updateBattery();
   void applyMotorCommand(float left_velocity_mps, float right_velocity_mps);
   void handleSerialCommands();
@@ -93,6 +94,9 @@ class RobotApp {
   WheelMeasurement left_wheel_;
   WheelMeasurement right_wheel_;
   ImuSample latest_imu_;
+
+  int32_t last_left_ticks_ = 0;
+  int32_t last_right_ticks_ = 0;
 
   unsigned long last_agent_check_ms_ = 0;
   unsigned long last_cmd_vel_ms_ = 0;

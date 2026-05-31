@@ -3,6 +3,7 @@
 #include <cmath>
 #include <WiFi.h>
 #include <ArduinoOTA.h>
+#include <driver/twai.h>
 
 #include <micro_ros_platformio.h>
 #include <rmw_microros/rmw_microros.h>
@@ -43,6 +44,7 @@ void RobotApp::setup() {
   digitalWrite(LOW_BATTERY_LED_PIN, HIGH); // Default off (active-low LED)
 
   web_manager_.begin(wifi_config_manager_);
+  web_manager_.setVofaDebugEnabled(network_config_.vofa_debug);
 
   (void) initializeRosMessages();
   imu_ready_ = imu_sensor_.begin();
@@ -50,7 +52,19 @@ void RobotApp::setup() {
     imu_ready_ = imu_sensor_.calibrateGyroBias();
   }
 
-  Serial1.begin(UART_BAUDRATE, SERIAL_8N1, 15, 16);
+  Serial1.begin(UART_BAUDRATE, SERIAL_8N1, UART1_RX, UART1_TX);
+
+  // Initialize new unused Serial2 (TX=IO1, RX=IO2)
+  Serial2.begin(NEW_SERIAL_BAUDRATE, SERIAL_8N1, NEW_SERIAL_RX, NEW_SERIAL_TX);
+
+  // Initialize new unused CAN (TX=IO6, RX=IO7)
+  setupCAN();
+
+  // Initialize last ticks to prevent delta spikes on first update
+  const int32_t raw_left_init = left_encoder_.readTicks();
+  const int32_t raw_right_init = right_encoder_.readTicks();
+  last_left_ticks_ = LEFT_ENCODER_INVERTED ? -raw_left_init : raw_left_init;
+  last_right_ticks_ = RIGHT_ENCODER_INVERTED ? -raw_right_init : raw_right_init;
 
   last_cmd_vel_ms_ = millis();
   last_control_update_ms_ = millis();
@@ -69,6 +83,22 @@ void RobotApp::loop() {
   if (transport_ready_) {
     updateAgentStateMachine();
   }
+
+  // Update system status for web manager
+  SystemStatus status;
+  status.battery_voltage = battery_voltage_;
+  status.battery_percentage = battery_percentage_;
+  status.agent_state = agent_state_;
+  status.wifi_rssi = (WiFi.status() == WL_CONNECTED) ? WiFi.RSSI() : 0;
+  status.left_speed = left_wheel_.velocity_mps;
+  status.left_target = target_left_velocity_mps_;
+  status.right_speed = right_wheel_.velocity_mps;
+  status.right_target = target_right_velocity_mps_;
+  status.yaw = odom_yaw_;
+  status.uptime_sec = millis() / 1000;
+  status.vofa_debug = web_manager_.vofaDebugEnabled();
+  web_manager_.updateSystemStatus(status);
+
   web_manager_.loop();
 
   // Periodically check battery status (every 1s)
@@ -86,37 +116,45 @@ void RobotApp::loop() {
 }
 
 void RobotApp::handleSerialCommands() {
-  static String input_buffer = "";
+  static char input_buffer[64];
+  static size_t buf_pos = 0;
   while (Serial1.available()) {
     char c = Serial1.read();
     if (c == '\n' || c == '\r') {
-      if (input_buffer.length() > 0) {
-        int separator_idx = input_buffer.indexOf(':');
-        if (separator_idx != -1) {
-          String cmd = input_buffer.substring(0, separator_idx);
-          float val = input_buffer.substring(separator_idx + 1).toFloat();
+      if (buf_pos > 0) {
+        input_buffer[buf_pos] = '\0';
+        char *separator = strchr(input_buffer, ':');
+        if (separator != nullptr) {
+          *separator = '\0';
+          char *cmd = input_buffer;
+          float val = atof(separator + 1);
 
           bool updated = true;
-          if (cmd == "p") kp_ = val;
-          else if (cmd == "i") ki_ = val;
-          else if (cmd == "d") kd_ = val;
-          else if (cmd == "f") kf_ = val;
-          else if (cmd == "o") output_limit_ = val;
-          else if (cmd == "m") motor_min_duty_ = val;
-          else updated = false;
+          if (strcmp(cmd, "p") == 0) kp_ = val;
+          else if (strcmp(cmd, "i") == 0) ki_ = val;
+          else if (strcmp(cmd, "d") == 0) kd_ = val;
+          else if (strcmp(cmd, "f") == 0) kf_ = val;
+          else if (strcmp(cmd, "o") == 0) output_limit_ = val;
+          else if (strcmp(cmd, "m") == 0) motor_min_duty_ = val;
+          else if (strcmp(cmd, "v") == 0) {
+            web_manager_.setVofaDebugEnabled(val > 0.5f);
+          } else updated = false;
 
           if (updated) {
             left_pid_.setGains(kp_, ki_, kd_);
             right_pid_.setGains(kp_, ki_, kd_);
             left_pid_.setOutputLimit(output_limit_);
             right_pid_.setOutputLimit(output_limit_);
-            Serial1.printf("Updated -> P:%.2f I:%.2f D:%.2f F:%.2f O:%.2f M:%.2f\n", kp_, ki_, kd_, kf_, output_limit_, motor_min_duty_);
+            Serial1.printf("Updated -> P:%.2f I:%.2f D:%.2f F:%.2f O:%.2f M:%.2f VOFA:%d\n",
+                           kp_, ki_, kd_, kf_, output_limit_, motor_min_duty_, web_manager_.vofaDebugEnabled());
           }
         }
-        input_buffer = "";
+        buf_pos = 0;
       }
     } else {
-      input_buffer += c;
+      if (buf_pos < sizeof(input_buffer) - 1) {
+        input_buffer[buf_pos++] = c;
+      }
     }
   }
 }
@@ -184,15 +222,17 @@ void RobotApp::controlTimerCallbackImpl() {
   applyMotorCommand(left_target, right_target);
 
   // VOFA+ JustFloat protocol
-  float debug_data[] = {
-      target_left_velocity_mps_,
-      left_wheel_.velocity_mps,
-      target_right_velocity_mps_,
-      right_wheel_.velocity_mps
-  };
-  Serial1.write(reinterpret_cast<uint8_t*>(debug_data), sizeof(debug_data));
-  const uint8_t tail[4] = {0x00, 0x00, 0x80, 0x7F};
-  Serial1.write(tail, 4);
+  if (web_manager_.vofaDebugEnabled()) {
+    float debug_data[] = {
+        target_left_velocity_mps_,
+        left_wheel_.velocity_mps,
+        target_right_velocity_mps_,
+        right_wheel_.velocity_mps
+    };
+    Serial1.write(reinterpret_cast<uint8_t*>(debug_data), sizeof(debug_data));
+    const uint8_t tail[4] = {0x00, 0x00, 0x80, 0x7F};
+    Serial1.write(tail, 4);
+  }
 
   const builtin_interfaces__msg__Time stamp = nowRosTime();
   fillOdomMessage(stamp);
@@ -338,6 +378,19 @@ void RobotApp::setupSensors() {
   right_encoder_.begin(M2_ENC_A, M2_ENC_B, 1);
 }
 
+void RobotApp::setupCAN() {
+  // Configure TWAI general, timing, and filter configs
+  twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
+      (gpio_num_t)CAN_TX_PIN, (gpio_num_t)CAN_RX_PIN, TWAI_MODE_NORMAL);
+  twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
+  twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+
+  // Install and start TWAI driver
+  if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK) {
+    (void)twai_start();
+  }
+}
+
 void RobotApp::applyMotorCommand(float left_velocity_mps, float right_velocity_mps) {
   const float control_dt = CONTROL_PERIOD_MS / 1000.0f;
   const auto compute_duty = [&](float target_mps, float measured_mps, PidController &pid, float previous_duty) {
@@ -380,17 +433,14 @@ void RobotApp::applyMotorCommand(float left_velocity_mps, float right_velocity_m
 }
 
 void RobotApp::updateWheelMeasurements(float dt) {
-  static int32_t last_left_ticks = 0;
-  static int32_t last_right_ticks = 0;
-
   const int32_t raw_left_ticks = left_encoder_.readTicks();
   const int32_t raw_right_ticks = right_encoder_.readTicks();
 
   left_wheel_.ticks = LEFT_ENCODER_INVERTED ? -raw_left_ticks : raw_left_ticks;
   right_wheel_.ticks = RIGHT_ENCODER_INVERTED ? -raw_right_ticks : raw_right_ticks;
 
-  const int32_t delta_left_ticks = left_wheel_.ticks - last_left_ticks;
-  const int32_t delta_right_ticks = right_wheel_.ticks - last_right_ticks;
+  const int32_t delta_left_ticks = left_wheel_.ticks - last_left_ticks_;
+  const int32_t delta_right_ticks = right_wheel_.ticks - last_right_ticks_;
 
   const float meters_per_tick = (PI_F * WHEEL_DIAMETER_M) / ENCODER_TICKS_PER_WHEEL_REV;
   const float left_delta_m = delta_left_ticks * meters_per_tick;
@@ -415,8 +465,8 @@ void RobotApp::updateWheelMeasurements(float dt) {
   odom_y_ += linear_velocity * sinf(heading_mid) * dt;
   odom_yaw_ += delta_yaw;
 
-  last_left_ticks = left_wheel_.ticks;
-  last_right_ticks = right_wheel_.ticks;
+  last_left_ticks_ = left_wheel_.ticks;
+  last_right_ticks_ = right_wheel_.ticks;
 }
 
 void RobotApp::fillOdomMessage(const builtin_interfaces__msg__Time &stamp) {

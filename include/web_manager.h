@@ -7,6 +7,7 @@
 #include <NetBIOS.h>
 
 #include "wifi_config_manager.h"
+#include "robot_types.h"
 
 namespace robot {
 
@@ -28,6 +29,13 @@ class WebManager {
 
   // Set the current battery status to broadcast to web clients
   void setBatteryStatus(float voltage, int percentage);
+
+  // VOFA+ debug toggle control
+  bool vofaDebugEnabled() const { return vofa_debug_enabled_; }
+  void setVofaDebugEnabled(bool enabled) { vofa_debug_enabled_ = enabled; }
+
+  // Update status info to broadcast
+  void updateSystemStatus(const SystemStatus &status) { status_ = status; }
 
  private:
   void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, 
@@ -65,6 +73,9 @@ class WebManager {
   };
   int current_tone_idx_ = -1;
   unsigned long tone_start_ms_ = 0;
+
+  bool vofa_debug_enabled_ = false;
+  SystemStatus status_;
 
   const uint32_t COMMAND_TIMEOUT_MS = 500;
 };

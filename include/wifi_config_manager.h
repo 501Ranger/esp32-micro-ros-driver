@@ -13,6 +13,7 @@ struct NetworkConfig {
   uint16_t agent_port = 8888;
   bool has_wifi = false;
   bool loaded_from_flash = false;
+  bool vofa_debug = false;
 };
 
 class WifiConfigManager {

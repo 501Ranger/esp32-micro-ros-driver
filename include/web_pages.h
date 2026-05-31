@@ -201,6 +201,54 @@ const char INDEX_HTML[] PROGMEM = R"=====(
       font-family: 'Outfit', sans-serif;
     }
 
+    /* Switch styles */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(255, 255, 255, 0.1);
+      transition: .4s;
+      border: 1px solid var(--card-border);
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+      background-color: var(--text-muted);
+      transition: .4s;
+    }
+    input:checked + .slider {
+      background-color: var(--accent-color);
+      border-color: var(--accent-color);
+    }
+    input:checked + .slider:before {
+      transform: translateX(20px);
+      background-color: white;
+    }
+    .slider.round {
+      border-radius: 24px;
+    }
+    .slider.round:before {
+      border-radius: 50%;
+    }
+
     .estop-section {
       width: 100%;
       display: flex;
@@ -438,6 +486,43 @@ const char INDEX_HTML[] PROGMEM = R"=====(
           <span id="control-state-val" class="stat-value">就绪</span>
         </div>
       </div>
+      <div class="stat-card">
+        <div class="stat-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+          </svg>
+        </div>
+        <div class="stat-content">
+          <span class="stat-label">Agent 状态</span>
+          <span id="agent-state-val" class="stat-value" style="color: var(--text-muted);">等待连接</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 12.55a11 11 0 0 1 14.08 0"></path>
+            <path d="M1.42 9a16 16 0 0 1 21.16 0"></path>
+            <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+            <line x1="12" y1="20" x2="12.01" y2="20"></line>
+          </svg>
+        </div>
+        <div class="stat-content">
+          <span class="stat-label">Wi-Fi 信号</span>
+          <span id="wifi-state-val" class="stat-value" style="color: var(--text-muted);">-- dBm</span>
+        </div>
+      </div>
+      <div class="stat-card" style="grid-column: span 2;">
+        <div class="stat-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M23 12a11.05 11.05 0 0 0-22 0zm-5 0a6 6 0 1 1-12 0 6 6 0 0 1 12 0z"></path>
+          </svg>
+        </div>
+        <div class="stat-content">
+          <span class="stat-label">轮轴速度</span>
+          <span id="speeds-val" class="stat-value">L:0.00 | R:0.00 m/s</span>
+        </div>
+      </div>
     </div>
 
     <div class="estop-section">
@@ -496,6 +581,39 @@ const char INDEX_HTML[] PROGMEM = R"=====(
           const data = JSON.parse(event.data);
           if (data.hasOwnProperty('battery_v') && data.hasOwnProperty('battery_p')) {
             document.getElementById('battery-value').innerText = `${data.battery_p} % / ${data.battery_v.toFixed(2)} V`;
+          }
+          if (data.hasOwnProperty('agent_state')) {
+            let stateStr = "未知";
+            let color = "var(--text-muted)";
+            switch(data.agent_state) {
+              case "WaitingAgent": stateStr = "等待 Agent"; color = "#f59e0b"; break;
+              case "AgentAvailable": stateStr = "Agent 可用"; color = "#6366f1"; break;
+              case "AgentConnected": stateStr = "连接成功"; color = "var(--success)"; break;
+              case "AgentDisconnected": stateStr = "连接断开"; color = "var(--error)"; break;
+            }
+            const agentVal = document.getElementById('agent-state-val');
+            if (agentVal) {
+              agentVal.innerText = stateStr;
+              agentVal.style.color = color;
+            }
+          }
+          if (data.hasOwnProperty('wifi_rssi')) {
+            const wifiVal = document.getElementById('wifi-state-val');
+            if (wifiVal) {
+              if (data.wifi_rssi === 0) {
+                wifiVal.innerText = "AP 热点模式";
+                wifiVal.style.color = "var(--accent-color)";
+              } else {
+                wifiVal.innerText = `${data.wifi_rssi} dBm`;
+                wifiVal.style.color = data.wifi_rssi > -70 ? "var(--success)" : "#f59e0b";
+              }
+            }
+          }
+          if (data.hasOwnProperty('left_speed') && data.hasOwnProperty('right_speed')) {
+            const speedVal = document.getElementById('speeds-val');
+            if (speedVal) {
+              speedVal.innerText = `L:${data.left_speed.toFixed(2)} | R:${data.right_speed.toFixed(2)} m/s`;
+            }
           }
         } catch (err) {
           // Ignore parse errors
@@ -795,6 +913,54 @@ const char WIFI_HTML[] PROGMEM = R"=====(
       font-size: 13px;
     }
 
+    /* Switch styles */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(255, 255, 255, 0.1);
+      transition: .4s;
+      border: 1px solid var(--card-border);
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+      background-color: var(--text-muted);
+      transition: .4s;
+    }
+    input:checked + .slider {
+      background-color: var(--accent-color);
+      border-color: var(--accent-color);
+    }
+    input:checked + .slider:before {
+      transform: translateX(20px);
+      background-color: white;
+    }
+    .slider.round {
+      border-radius: 24px;
+    }
+    .slider.round:before {
+      border-radius: 50%;
+    }
+
     form {
       display: flex;
       flex-direction: column;
@@ -956,6 +1122,17 @@ const char WIFI_HTML[] PROGMEM = R"=====(
         </div>
       </div>
       
+      <div class="form-group">
+        <label>VOFA+ 调试输出</label>
+        <div style="display: flex; align-items: center; gap: 10px; margin-top: 4px;">
+          <label class="switch">
+            <input type="checkbox" id="vofa_debug" name="vofa_debug" value="true">
+            <span class="slider round"></span>
+          </label>
+          <span style="font-size: 13px; color: var(--text-muted);">启用 Serial1 调试串口周期发送浮点波形</span>
+        </div>
+      </div>
+
       <div class="button-group">
         <button type="submit">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1081,6 +1258,7 @@ const char WIFI_HTML[] PROGMEM = R"=====(
         if (!ssidInput.value) ssidInput.value = data.ssid || '';
         if (!agentIpInput.value) agentIpInput.value = data.agent_ip || '';
         if (!agentPortInput.value) agentPortInput.value = data.agent_port || 8888;
+        document.getElementById('vofa_debug').checked = data.vofa_debug || false;
         
         staStatusEl.innerText = data.connected ? `已连接 (${data.local_ip})` : '未连接';
         staStatusEl.style.color = data.connected ? 'var(--success)' : 'var(--error)';

@@ -101,14 +101,32 @@ void WebManager::loop() {
 #endif
   }
   
-  // Broadcast battery status to connected WebSocket clients every 1s
+  // Broadcast system status to connected WebSocket clients every 1s
   if (connected_clients_ > 0 && millis() - last_status_broadcast_ms_ >= 1000) {
     last_status_broadcast_ms_ = millis();
-    StaticJsonDocument<96> doc;
-    doc["battery_v"] = battery_voltage_;
-    doc["battery_p"] = battery_percentage_;
-    String output;
-    serializeJson(doc, output);
+    StaticJsonDocument<256> doc;
+    doc["battery_v"] = status_.battery_voltage;
+    doc["battery_p"] = status_.battery_percentage;
+    
+    const char* state_str = "WaitingAgent";
+    switch (status_.agent_state) {
+      case AgentState::WaitingAgent: state_str = "WaitingAgent"; break;
+      case AgentState::AgentAvailable: state_str = "AgentAvailable"; break;
+      case AgentState::AgentConnected: state_str = "AgentConnected"; break;
+      case AgentState::AgentDisconnected: state_str = "AgentDisconnected"; break;
+    }
+    doc["agent_state"] = state_str;
+    doc["wifi_rssi"] = status_.wifi_rssi;
+    doc["left_speed"] = status_.left_speed;
+    doc["left_target"] = status_.left_target;
+    doc["right_speed"] = status_.right_speed;
+    doc["right_target"] = status_.right_target;
+    doc["yaw"] = status_.yaw;
+    doc["uptime"] = status_.uptime_sec;
+    doc["vofa_debug"] = vofa_debug_enabled_;
+
+    char output[256];
+    serializeJson(doc, output, sizeof(output));
     ws_.textAll(output);
   }
   
@@ -157,14 +175,15 @@ void WebManager::handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
         float x = doc["x"];
         float y = doc["y"];
         
-        Serial.printf("Web Joystick: x=%.2f, y=%.2f\n", x, y);
-        
         linear_out_ = y * 1.0f;
         angular_out_ = -x * 1.5f;
         
         // Update state
         is_active_ = (fabs(linear_out_) > 0.01f || fabs(angular_out_) > 0.01f);
         last_command_ms_ = millis();
+      }
+      if (doc.containsKey("vofa_debug")) {
+        vofa_debug_enabled_ = doc["vofa_debug"];
       }
     } else {
 #ifndef USE_SERIAL_TRANSPORT
@@ -202,6 +221,7 @@ void WebManager::handleWifiSave(AsyncWebServerRequest *request) {
   }
   config.agent_port = static_cast<uint16_t>(requested_port);
   config.has_wifi = config.ssid.length() > 0;
+  config.vofa_debug = request->hasParam("vofa_debug", true);
 
   IPAddress parsed_agent_ip;
   if (!config.has_wifi || !parsed_agent_ip.fromString(config.agent_ip)) {
@@ -253,8 +273,8 @@ void WebManager::handleWifiHistoryGet(AsyncWebServerRequest *request) {
     obj["agent_port"] = item.agent_port;
   }
 
-  String output;
-  serializeJson(doc, output);
+  char output[1024];
+  serializeJson(doc, output, sizeof(output));
   request->send(200, "application/json", output);
 }
 
@@ -294,9 +314,10 @@ void WebManager::sendWifiStatus(AsyncWebServerRequest *request) {
   doc["connected"] = WiFi.status() == WL_CONNECTED;
   doc["local_ip"] = WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "";
   doc["ap_ip"] = WiFi.softAPIP().toString();
+  doc["vofa_debug"] = config.vofa_debug;
 
-  String output;
-  serializeJson(doc, output);
+  char output[384];
+  serializeJson(doc, output, sizeof(output));
   request->send(200, "application/json", output);
 }
 
@@ -332,6 +353,8 @@ void WebManager::playConnectSound() {
 void WebManager::setBatteryStatus(float voltage, int percentage) {
   battery_voltage_ = voltage;
   battery_percentage_ = percentage;
+  status_.battery_voltage = voltage;
+  status_.battery_percentage = percentage;
 }
 
 }  // namespace robot
