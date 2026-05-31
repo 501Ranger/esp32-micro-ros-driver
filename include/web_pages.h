@@ -512,17 +512,6 @@ const char INDEX_HTML[] PROGMEM = R"=====(
           <span id="wifi-state-val" class="stat-value" style="color: var(--text-muted);">-- dBm</span>
         </div>
       </div>
-      <div class="stat-card" style="grid-column: span 2;">
-        <div class="stat-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M23 12a11.05 11.05 0 0 0-22 0zm-5 0a6 6 0 1 1-12 0 6 6 0 0 1 12 0z"></path>
-          </svg>
-        </div>
-        <div class="stat-content">
-          <span class="stat-label">轮轴速度</span>
-          <span id="speeds-val" class="stat-value">L:0.00 | R:0.00 m/s</span>
-        </div>
-      </div>
     </div>
 
     <div class="estop-section">
@@ -607,12 +596,6 @@ const char INDEX_HTML[] PROGMEM = R"=====(
                 wifiVal.innerText = `${data.wifi_rssi} dBm`;
                 wifiVal.style.color = data.wifi_rssi > -70 ? "var(--success)" : "#f59e0b";
               }
-            }
-          }
-          if (data.hasOwnProperty('left_speed') && data.hasOwnProperty('right_speed')) {
-            const speedVal = document.getElementById('speeds-val');
-            if (speedVal) {
-              speedVal.innerText = `L:${data.left_speed.toFixed(2)} | R:${data.right_speed.toFixed(2)} m/s`;
             }
           }
         } catch (err) {

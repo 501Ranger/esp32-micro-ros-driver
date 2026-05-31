@@ -104,7 +104,7 @@ void WebManager::loop() {
   // Broadcast system status to connected WebSocket clients every 1s
   if (connected_clients_ > 0 && millis() - last_status_broadcast_ms_ >= 1000) {
     last_status_broadcast_ms_ = millis();
-    StaticJsonDocument<256> doc;
+    StaticJsonDocument<128> doc;
     doc["battery_v"] = status_.battery_voltage;
     doc["battery_p"] = status_.battery_percentage;
     
@@ -117,15 +117,9 @@ void WebManager::loop() {
     }
     doc["agent_state"] = state_str;
     doc["wifi_rssi"] = status_.wifi_rssi;
-    doc["left_speed"] = status_.left_speed;
-    doc["left_target"] = status_.left_target;
-    doc["right_speed"] = status_.right_speed;
-    doc["right_target"] = status_.right_target;
-    doc["yaw"] = status_.yaw;
-    doc["uptime"] = status_.uptime_sec;
     doc["vofa_debug"] = vofa_debug_enabled_;
 
-    char output[256];
+    char output[128];
     serializeJson(doc, output, sizeof(output));
     ws_.textAll(output);
   }
