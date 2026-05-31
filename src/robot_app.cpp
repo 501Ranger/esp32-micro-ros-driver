@@ -43,6 +43,12 @@ void RobotApp::setup() {
   pinMode(LOW_BATTERY_LED_PIN, OUTPUT);
   digitalWrite(LOW_BATTERY_LED_PIN, HIGH); // Default off (active-low LED)
 
+  // Perform raw ADC reading on startup to initialize filter value
+  uint32_t init_pin_mv = analogReadMilliVolts(BATTERY_ADC_PIN);
+  battery_voltage_ = (static_cast<float>(init_pin_mv) / 1000.0f) * BATTERY_VOLTAGE_DIVIDER_RATIO;
+  float init_pct = (battery_voltage_ - BATTERY_MIN_V) / (BATTERY_MAX_V - BATTERY_MIN_V) * 100.0f;
+  battery_percentage_ = constrain(static_cast<int>(init_pct), 0, 100);
+
   web_manager_.begin(wifi_config_manager_);
   web_manager_.setVofaDebugEnabled(network_config_.vofa_debug);
 
@@ -112,6 +118,14 @@ void RobotApp::loop() {
     if (now - last_control_update_ms_ >= CONTROL_PERIOD_MS) {
       controlTimerCallbackImpl();
     }
+  }
+
+  // Handle low battery LED flash indicator
+  if (battery_voltage_ < LOW_BATTERY_THRESHOLD_V) {
+    // 2Hz flashing (250ms ON, 250ms OFF), active-low LED
+    digitalWrite(LOW_BATTERY_LED_PIN, ((millis() / 250) % 2 == 0) ? LOW : HIGH);
+  } else {
+    digitalWrite(LOW_BATTERY_LED_PIN, HIGH); // Off (HIGH)
   }
 }
 
@@ -656,12 +670,7 @@ void RobotApp::updateBattery() {
   float pct = (battery_voltage_ - BATTERY_MIN_V) / (BATTERY_MAX_V - BATTERY_MIN_V) * 100.0f;
   battery_percentage_ = constrain(static_cast<int>(pct), 0, 100);
 
-  // Active-Low Low Battery alert LED
-  if (battery_voltage_ < LOW_BATTERY_THRESHOLD_V) {
-    digitalWrite(LOW_BATTERY_LED_PIN, LOW); // Turn on alert LED
-  } else {
-    digitalWrite(LOW_BATTERY_LED_PIN, HIGH); // Turn off alert LED
-  }
+
 
   // Update WebManager battery status
   web_manager_.setBatteryStatus(battery_voltage_, battery_percentage_);
