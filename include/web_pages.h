@@ -249,90 +249,7 @@ const char INDEX_HTML[] PROGMEM = R"=====(
       border-radius: 50%;
     }
 
-    .estop-section {
-      width: 100%;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
 
-    .estop-outer {
-      width: 110px;
-      height: 110px;
-      border-radius: 50%;
-      background: radial-gradient(circle, #fcd34d 0%, #d97706 100%);
-      border: 5px solid #111;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 
-        0 8px 16px rgba(0,0,0,0.4),
-        inset 0 2px 5px rgba(255,255,255,0.4);
-      cursor: pointer;
-      position: relative;
-      transition: transform 0.1s ease;
-    }
-
-    .estop-outer:active {
-      transform: scale(0.97);
-    }
-
-    .estop-button {
-      width: 76px;
-      height: 76px;
-      border-radius: 50%;
-      background: radial-gradient(circle at 35% 35%, #ef4444 0%, #991b1b 100%);
-      border: 3px solid #7f1d1d;
-      box-shadow: 
-        inset 0 3px 5px rgba(255,255,255,0.3),
-        0 4px 6px rgba(0,0,0,0.5);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      color: #fff;
-      font-family: 'Outfit', sans-serif;
-      font-weight: 800;
-      font-size: 13px;
-      letter-spacing: 0.5px;
-      text-shadow: 0 1px 3px rgba(0,0,0,0.6);
-      transition: all 0.2s ease;
-    }
-
-    .estop-text-top {
-      font-size: 10px;
-      opacity: 0.8;
-      margin-bottom: -2px;
-    }
-
-    .estop-outer.active {
-      background: radial-gradient(circle, #fef08a 0%, #ca8a04 100%);
-      animation: estop-glow 1s infinite alternate;
-    }
-
-    .estop-outer.active .estop-button {
-      background: radial-gradient(circle at 35% 35%, #dc2626 0%, #b91c1c 100%);
-      transform: translateZ(0) scale(0.92);
-      box-shadow: 
-        inset 0 5px 8px rgba(0,0,0,0.8),
-        0 2px 3px rgba(0,0,0,0.3);
-      border-color: #991b1b;
-    }
-
-    @keyframes estop-glow {
-      0% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.4), 0 8px 16px rgba(0,0,0,0.4); }
-      100% { box-shadow: 0 0 30px rgba(239, 68, 68, 0.8), 0 8px 16px rgba(0,0,0,0.4); }
-    }
-
-    .estop-label-text {
-      position: absolute;
-      bottom: -22px;
-      font-size: 10px;
-      font-weight: 600;
-      color: var(--text-muted);
-      letter-spacing: 1px;
-      text-transform: uppercase;
-    }
 
     .joystick-container {
       flex: 1;
@@ -345,8 +262,8 @@ const char INDEX_HTML[] PROGMEM = R"=====(
 
     .joystick-zone {
       position: relative;
-      width: 220px;
-      height: 220px;
+      width: 280px;
+      height: 280px;
       background: rgba(18, 24, 38, 0.4);
       border: 2px solid var(--card-border);
       border-radius: 50%;
@@ -382,8 +299,8 @@ const char INDEX_HTML[] PROGMEM = R"=====(
 
     .stick {
       position: absolute;
-      width: 76px;
-      height: 76px;
+      width: 90px;
+      height: 90px;
       background: radial-gradient(circle at 30% 30%, #374151 0%, #111827 100%);
       border: 2px solid #4b5563;
       border-radius: 50%;
@@ -416,20 +333,82 @@ const char INDEX_HTML[] PROGMEM = R"=====(
         inset 0 2px 4px rgba(255,255,255,0.2);
     }
 
-    .joystick-disabled .joystick-zone {
-      border-color: var(--error);
-      opacity: 0.5;
+    /* Custom Slider Styling */
+    .custom-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 10px;
+      border-radius: 5px;
+      background: linear-gradient(to right, #6366f1 0%, #a855f7 var(--value, 61.5%), rgba(255, 255, 255, 0.15) var(--value, 61.5%), rgba(255, 255, 255, 0.15) 100%);
+      outline: none;
+      transition: background 0.1s ease;
+      cursor: pointer;
     }
-    .joystick-disabled .stick {
-      background: #1f2937;
-      border-color: #374151;
-      box-shadow: none;
+
+    .custom-slider:hover {
+      background: linear-gradient(to right, #6366f1 0%, #a855f7 var(--value, 61.5%), rgba(255, 255, 255, 0.2) var(--value, 61.5%), rgba(255, 255, 255, 0.2) 100%);
     }
-    .joystick-disabled .stick::after {
-      background: #4b5563;
-      box-shadow: none;
-      opacity: 0.3;
+
+    .custom-slider::-webkit-slider-runnable-track {
+      width: 100%;
+      height: 10px;
+      border-radius: 5px;
+      background: transparent;
     }
+
+    .custom-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--accent-gradient);
+      box-shadow: 0 0 10px var(--accent-color);
+      cursor: pointer;
+      margin-top: -6px; /* (10px track height - 22px thumb height) / 2 = -6px */
+      transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease;
+    }
+
+    .custom-slider::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+      box-shadow: 0 0 16px var(--accent-color), 0 0 4px rgba(255, 255, 255, 0.4);
+    }
+
+    .custom-slider::-webkit-slider-thumb:active {
+      transform: scale(1.4);
+      box-shadow: 0 0 24px var(--accent-color), 0 0 8px rgba(255, 255, 255, 0.8);
+    }
+
+    .custom-slider::-moz-range-track {
+      width: 100%;
+      height: 10px;
+      border-radius: 5px;
+      background: transparent;
+    }
+
+    .custom-slider::-moz-range-thumb {
+      width: 22px;
+      height: 22px;
+      border: none;
+      border-radius: 50%;
+      background: var(--accent-gradient);
+      box-shadow: 0 0 10px var(--accent-color);
+      cursor: pointer;
+      transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease;
+    }
+
+    .custom-slider::-moz-range-thumb:hover {
+      transform: scale(1.2);
+      box-shadow: 0 0 16px var(--accent-color), 0 0 4px rgba(255, 255, 255, 0.4);
+    }
+
+    .custom-slider::-moz-range-thumb:active {
+      transform: scale(1.4);
+      box-shadow: 0 0 24px var(--accent-color), 0 0 8px rgba(255, 255, 255, 0.8);
+    }
+
+
   </style>
 </head>
 <body>
@@ -478,17 +457,6 @@ const char INDEX_HTML[] PROGMEM = R"=====(
       <div class="stat-card">
         <div class="stat-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-          </svg>
-        </div>
-        <div class="stat-content">
-          <span class="stat-label">控制状态</span>
-          <span id="control-state-val" class="stat-value">就绪</span>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
             <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
           </svg>
@@ -498,29 +466,17 @@ const char INDEX_HTML[] PROGMEM = R"=====(
           <span id="agent-state-val" class="stat-value" style="color: var(--text-muted);">等待连接</span>
         </div>
       </div>
-      <div class="stat-card">
-        <div class="stat-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M5 12.55a11 11 0 0 1 14.08 0"></path>
-            <path d="M1.42 9a16 16 0 0 1 21.16 0"></path>
-            <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
-            <line x1="12" y1="20" x2="12.01" y2="20"></line>
-          </svg>
-        </div>
-        <div class="stat-content">
-          <span class="stat-label">Wi-Fi 信号</span>
-          <span id="wifi-state-val" class="stat-value" style="color: var(--text-muted);">-- dBm</span>
-        </div>
-      </div>
     </div>
 
-    <div class="estop-section">
-      <div id="estop-btn" class="estop-outer">
-        <div class="estop-button">
-          <span class="estop-text-top">EMERGENCY</span>
-          <span>STOP</span>
-        </div>
-        <span class="estop-label-text">急停按钮</span>
+    <div class="speed-control-panel" style="width: 100%; display: flex; flex-direction: column; gap: 10px; background: var(--card-bg); border: 1px solid var(--card-border); backdrop-filter: blur(12px); border-radius: 16px; padding: 16px 18px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); margin-top: 8px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">最大速度倍率</span>
+        <span id="speed-scale-val" style="font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 800; color: var(--accent-color);">1.0x</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 14px; width: 100%;">
+        <span style="font-size: 11px; color: var(--text-muted); font-weight: 600;">0.2x</span>
+        <input type="range" id="speed-slider" class="custom-slider" min="0.2" max="1.5" step="0.1" value="1.0" style="--value: 61.5%;">
+        <span style="font-size: 11px; color: var(--text-muted); font-weight: 600;">1.5x</span>
       </div>
     </div>
 
@@ -537,19 +493,37 @@ const char INDEX_HTML[] PROGMEM = R"=====(
     let ws;
     const statusBadge = document.getElementById('status-badge');
     const statusText = document.getElementById('status-text');
-    const ctrlStateVal = document.getElementById('control-state-val');
     const zone = document.getElementById('joystick-zone');
     const stick = document.getElementById('stick');
-    const estopBtn = document.getElementById('estop-btn');
     const joystickWrapper = document.getElementById('joystick-wrapper');
 
     let isDragging = false;
     let centerX, centerY;
-    const maxRadius = 110 - 38;
+    const maxRadius = 140 - 45;
 
     let outX = 0;
     let outY = 0;
-    let isEstop = false;
+    let speedScale = 1.0;
+
+    const speedSlider = document.getElementById('speed-slider');
+    const speedScaleVal = document.getElementById('speed-scale-val');
+
+    function updateSliderProgress(el) {
+      const min = parseFloat(el.min) || 0.2;
+      const max = parseFloat(el.max) || 1.5;
+      const val = parseFloat(el.value);
+      const percentage = ((val - min) / (max - min)) * 100;
+      el.style.setProperty('--value', `${percentage}%`);
+    }
+
+    // Initialize progress bar colors on load
+    updateSliderProgress(speedSlider);
+
+    speedSlider.addEventListener('input', (e) => {
+      speedScale = parseFloat(e.target.value);
+      speedScaleVal.innerText = `${speedScale.toFixed(1)}x`;
+      updateSliderProgress(e.target);
+    });
 
     function connect() {
       ws = new WebSocket(`ws://${window.location.host}/ws`);
@@ -569,7 +543,15 @@ const char INDEX_HTML[] PROGMEM = R"=====(
         try {
           const data = JSON.parse(event.data);
           if (data.hasOwnProperty('battery_v') && data.hasOwnProperty('battery_p')) {
-            document.getElementById('battery-value').innerText = `${data.battery_p} % / ${data.battery_v.toFixed(2)} V`;
+            const batValEl = document.getElementById('battery-value');
+            batValEl.innerText = `${data.battery_p} % / ${data.battery_v.toFixed(2)} V`;
+            if (data.battery_p >= 50) {
+              batValEl.style.color = 'var(--success)';
+            } else if (data.battery_p >= 20) {
+              batValEl.style.color = '#f59e0b';
+            } else {
+              batValEl.style.color = 'var(--error)';
+            }
           }
           if (data.hasOwnProperty('agent_state')) {
             let stateStr = "未知";
@@ -586,18 +568,6 @@ const char INDEX_HTML[] PROGMEM = R"=====(
               agentVal.style.color = color;
             }
           }
-          if (data.hasOwnProperty('wifi_rssi')) {
-            const wifiVal = document.getElementById('wifi-state-val');
-            if (wifiVal) {
-              if (data.wifi_rssi === 0) {
-                wifiVal.innerText = "AP 热点模式";
-                wifiVal.style.color = "var(--accent-color)";
-              } else {
-                wifiVal.innerText = `${data.wifi_rssi} dBm`;
-                wifiVal.style.color = data.wifi_rssi > -70 ? "var(--success)" : "#f59e0b";
-              }
-            }
-          }
         } catch (err) {
           // Ignore parse errors
         }
@@ -606,10 +576,8 @@ const char INDEX_HTML[] PROGMEM = R"=====(
 
     function sendCommand() {
       if (ws && ws.readyState === WebSocket.OPEN) {
-        if (isEstop) {
-          ws.send(JSON.stringify({ x: 0, y: 0 }));
-        } else if (isDragging || (outX === 0 && outY === 0)) {
-          ws.send(JSON.stringify({ x: outX, y: outY }));
+        if (isDragging || (outX === 0 && outY === 0)) {
+          ws.send(JSON.stringify({ x: outX * speedScale, y: outY * speedScale }));
         }
       }
     }
@@ -617,7 +585,6 @@ const char INDEX_HTML[] PROGMEM = R"=====(
     setInterval(sendCommand, 50);
 
     function updateStickPosition(clientX, clientY) {
-      if (isEstop) return;
       let dx = clientX - centerX;
       let dy = clientY - centerY;
       const distance = Math.sqrt(dx * dx + dy * dy);
@@ -645,26 +612,7 @@ const char INDEX_HTML[] PROGMEM = R"=====(
       }
     }
 
-    estopBtn.addEventListener('click', () => {
-      isEstop = !isEstop;
-      if (isEstop) {
-        estopBtn.classList.add('active');
-        joystickWrapper.classList.add('joystick-disabled');
-        ctrlStateVal.innerText = "急停触发";
-        ctrlStateVal.style.color = "var(--error)";
-        resetStick();
-        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-      } else {
-        estopBtn.classList.remove('active');
-        joystickWrapper.classList.remove('joystick-disabled');
-        ctrlStateVal.innerText = "就绪";
-        ctrlStateVal.style.color = "var(--text-main)";
-        if (navigator.vibrate) navigator.vibrate(50);
-      }
-    });
-
     zone.addEventListener('touchstart', (e) => {
-      if (isEstop) return;
       e.preventDefault();
       const rect = zone.getBoundingClientRect();
       centerX = rect.left + rect.width / 2;
@@ -675,7 +623,6 @@ const char INDEX_HTML[] PROGMEM = R"=====(
     });
 
     zone.addEventListener('touchmove', (e) => {
-      if (isEstop) return;
       e.preventDefault();
       if (!isDragging) return;
       updateStickPosition(e.touches[0].clientX, e.touches[0].clientY);
@@ -692,7 +639,6 @@ const char INDEX_HTML[] PROGMEM = R"=====(
     });
 
     zone.addEventListener('mousedown', (e) => {
-      if (isEstop) return;
       const rect = zone.getBoundingClientRect();
       centerX = rect.left + rect.width / 2;
       centerY = rect.top + rect.height / 2;
@@ -702,7 +648,7 @@ const char INDEX_HTML[] PROGMEM = R"=====(
     });
 
     document.addEventListener('mousemove', (e) => {
-      if (!isDragging || isEstop) return;
+      if (!isDragging) return;
       updateStickPosition(e.clientX, e.clientY);
     });
 
