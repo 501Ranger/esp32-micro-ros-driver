@@ -5,7 +5,7 @@
 
 namespace robot {
 
-using namespace robot_config;
+using namespace config;
 
 WebManager::WebManager() : server_(80), ws_("/ws") {}
 
@@ -44,6 +44,9 @@ void WebManager::begin(WifiConfigManager &wifi_config_manager) {
   });
   server_.on("/api/wifi", HTTP_POST, [this](AsyncWebServerRequest *request){
     this->handleWifiSave(request);
+  });
+  server_.on("/api/imu/calibrate", HTTP_POST, [this](AsyncWebServerRequest *request){
+    this->handleImuCalibrate(request);
   });
 
   server_.begin();
@@ -218,8 +221,22 @@ void WebManager::handleWifiSave(AsyncWebServerRequest *request) {
   config.vofa_debug = request->hasParam("vofa_debug", true);
 
   IPAddress parsed_agent_ip;
-  if (!config.has_wifi || !parsed_agent_ip.fromString(config.agent_ip)) {
-    request->send(400, "text/plain", "Invalid WiFi SSID or Agent IP");
+  bool is_valid_ip = parsed_agent_ip.fromString(config.agent_ip);
+  bool is_valid_hostname = false;
+  
+  if (!is_valid_ip && config.agent_ip.length() > 0) {
+    is_valid_hostname = true;
+    for (size_t i = 0; i < config.agent_ip.length(); ++i) {
+      char c = config.agent_ip[i];
+      if (!isalnum(c) && c != '.' && c != '-') {
+        is_valid_hostname = false;
+        break;
+      }
+    }
+  }
+
+  if (!config.has_wifi || (!is_valid_ip && !is_valid_hostname)) {
+    request->send(400, "text/plain", "Invalid WiFi SSID or Agent IP/Hostname");
     return;
   }
 
@@ -349,6 +366,11 @@ void WebManager::setBatteryStatus(float voltage, int percentage) {
   battery_percentage_ = percentage;
   status_.battery_voltage = voltage;
   status_.battery_percentage = percentage;
+}
+
+void WebManager::handleImuCalibrate(AsyncWebServerRequest *request) {
+  imu_calibrate_requested_ = true;
+  request->send(200, "text/plain", "IMU校准指令已下发，请保持机器人静止！");
 }
 
 }  // namespace robot

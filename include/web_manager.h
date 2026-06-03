@@ -37,7 +37,17 @@ class WebManager {
   // Update status info to broadcast
   void updateSystemStatus(const SystemStatus &status) { status_ = status; }
 
+  // Check and clear IMU calibration request
+  bool checkAndClearImuCalibrateRequested() {
+    if (imu_calibrate_requested_) {
+      imu_calibrate_requested_ = false;
+      return true;
+    }
+    return false;
+  }
+
  private:
+  void handleImuCalibrate(AsyncWebServerRequest *request);
   void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, 
                         AwsEventType type, void *arg, uint8_t *data, size_t len);
   void handleWebSocketMessage(void *arg, uint8_t *data, size_t len);
@@ -77,6 +87,7 @@ class WebManager {
   bool vofa_debug_enabled_ = false;
   SystemStatus status_;
 
+  volatile bool imu_calibrate_requested_ = false;
   const uint32_t COMMAND_TIMEOUT_MS = 500;
 };
 

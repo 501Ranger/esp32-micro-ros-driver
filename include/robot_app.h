@@ -116,12 +116,14 @@ class RobotApp {
   unsigned long last_battery_update_ms_ = 0;
 
   // Dynamic tuning parameters
-  float kp_ = robot_config::MOTOR_PID_KP;
-  float ki_ = robot_config::MOTOR_PID_KI;
-  float kd_ = robot_config::MOTOR_PID_KD;
-  float kf_ = robot_config::MOTOR_FEEDFORWARD_GAIN;
-  float output_limit_ = robot_config::MOTOR_PID_OUTPUT_LIMIT;
-  float motor_min_duty_ = robot_config::MOTOR_MIN_EFFECTIVE_DUTY;
+  float kp_ = config::MOTOR_PID_KP;
+  float ki_ = config::MOTOR_PID_KI;
+  float kd_ = config::MOTOR_PID_KD;
+  float kf_ = config::MOTOR_FEEDFORWARD_GAIN;
+  float output_limit_ = config::MOTOR_PID_OUTPUT_LIMIT;
+  float motor_min_duty_ = config::MOTOR_MIN_EFFECTIVE_DUTY;
+
+  int ros_init_stage_ = 0;
 };
 
 }  // namespace robot

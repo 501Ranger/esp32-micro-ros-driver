@@ -18,6 +18,7 @@ class EncoderReader {
   static int8_t quadratureDelta(uint8_t previous_state, uint8_t current_state);
   uint8_t readState() const;
 
+  mutable portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
   uint8_t pin_a_ = 0;
   uint8_t pin_b_ = 0;
   volatile int32_t ticks_ = 0;

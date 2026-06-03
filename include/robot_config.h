@@ -2,7 +2,8 @@
 
 #include <Arduino.h>
 
-namespace robot_config {
+namespace robot {
+namespace config {
 
 constexpr uint8_t M1_IN1 = 14;
 constexpr uint8_t M1_IN2 = 21;
@@ -92,4 +93,5 @@ constexpr char BATTERY_TOPIC[] = "battery_state";
 constexpr char ODOM_FRAME[] = "odom";
 constexpr char BASE_FRAME[] = "base_link";
 
-}  // namespace robot_config
+}  // namespace config
+}  // namespace robot

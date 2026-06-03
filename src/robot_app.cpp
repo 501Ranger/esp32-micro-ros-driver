@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <WiFi.h>
+#include <ESPmDNS.h>
 #include <ArduinoOTA.h>
 #include <driver/twai.h>
 
@@ -13,7 +14,7 @@
 
 namespace robot {
 
-using namespace robot_config;
+using namespace config;
 
 namespace {
 
@@ -86,6 +87,28 @@ void RobotApp::loop() {
     ArduinoOTA.handle();
   }
   handleSerialCommands();
+
+  // Handle dynamic IMU calibration requests from Web API
+  if (web_manager_.checkAndClearImuCalibrateRequested()) {
+    stopMotors();
+#ifndef USE_SERIAL_TRANSPORT
+    Serial.println("IMU gyroscope calibration requested via Web API... Keep static.");
+#endif
+    if (imu_ready_) {
+      // Toggle LED to indicate active calibration status
+      digitalWrite(LOW_BATTERY_LED_PIN, LOW); // Active-low LED On
+      imu_sensor_.calibrateGyroBias();
+      digitalWrite(LOW_BATTERY_LED_PIN, HIGH); // Active-low LED Off
+#ifndef USE_SERIAL_TRANSPORT
+      Serial.println("IMU calibration successful!");
+#endif
+    } else {
+#ifndef USE_SERIAL_TRANSPORT
+      Serial.println("Warning: IMU not ready, calibration skipped.");
+#endif
+    }
+  }
+
   if (transport_ready_) {
     updateAgentStateMachine();
   }
@@ -323,23 +346,39 @@ void RobotApp::setupTransport() {
   Serial.begin(UART_BAUDRATE, SERIAL_8N1, UART0_RX, UART0_TX);
   if (wifi_ready_) {
     IPAddress agent_ip;
-    agent_ip.fromString(network_config_.agent_ip);
-    
-    // Register the custom transport directly without calling set_microros_wifi_transports,
-    // which would call WiFi.begin again and disrupt the connection.
-    static struct micro_ros_agent_locator locator;
-    locator.address = agent_ip;
-    locator.port = network_config_.agent_port;
+    if (!agent_ip.fromString(network_config_.agent_ip)) {
+      // It's not a raw IP, try resolving it.
+      // If it ends with .local, resolve via mDNS
+      if (network_config_.agent_ip.endsWith(".local")) {
+        MDNS.begin("esp32robot");
+        String host = network_config_.agent_ip.substring(0, network_config_.agent_ip.length() - 6);
+        agent_ip = MDNS.queryHost(host);
+      } else {
+        // Try standard DNS
+        WiFi.hostByName(network_config_.agent_ip.c_str(), agent_ip);
+      }
+    }
 
-    rmw_uros_set_custom_transport(
-        false,
-        (void *) &locator,
-        platformio_transport_open,
-        platformio_transport_close,
-        platformio_transport_write,
-        platformio_transport_read
-    );
-    transport_ready_ = true;
+    if (agent_ip != IPAddress(0, 0, 0, 0)) {
+      // Register the custom transport directly without calling set_microros_wifi_transports,
+      // which would call WiFi.begin again and disrupt the connection.
+      static struct micro_ros_agent_locator locator;
+      locator.address = agent_ip;
+      locator.port = network_config_.agent_port;
+
+      rmw_uros_set_custom_transport(
+          false,
+          (void *) &locator,
+          platformio_transport_open,
+          platformio_transport_close,
+          platformio_transport_write,
+          platformio_transport_read
+      );
+      transport_ready_ = true;
+    } else {
+      Serial.printf("Error: Could not resolve Agent address: %s\n", network_config_.agent_ip.c_str());
+      transport_ready_ = false;
+    }
   }
 #else
   ros_serial_.begin(UART_BAUDRATE, SERIAL_8N1, UART0_RX, UART0_TX);
@@ -563,46 +602,63 @@ bool RobotApp::createRosEntities() {
   if (rclc_support_init(&support_, 0, nullptr, &allocator_) != RCL_RET_OK) {
     return false;
   }
+  ros_init_stage_ = 1;
 
   if (rclc_node_init_default(&node_, NODE_NAME, "", &support_) != RCL_RET_OK) {
+    destroyRosEntities();
     return false;
   }
+  ros_init_stage_ = 2;
 
   if (rclc_publisher_init_default(
           &odom_publisher_, &node_,
           ROSIDL_GET_MSG_TYPE_SUPPORT(nav_msgs, msg, Odometry), ODOM_TOPIC) != RCL_RET_OK) {
+    destroyRosEntities();
     return false;
   }
+  ros_init_stage_ = 3;
 
   if (rclc_publisher_init_default(
           &battery_publisher_, &node_,
           ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, BatteryState), BATTERY_TOPIC) != RCL_RET_OK) {
+    destroyRosEntities();
     return false;
   }
+  ros_init_stage_ = 4;
 
   if (rclc_subscription_init_default(
           &cmd_vel_subscription_, &node_,
           ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist), CMD_VEL_TOPIC) != RCL_RET_OK) {
+    destroyRosEntities();
     return false;
   }
+  ros_init_stage_ = 5;
 
   if (rclc_timer_init_default(&control_timer_, &support_, RCL_MS_TO_NS(CONTROL_PERIOD_MS),
                               controlTimerCallback) != RCL_RET_OK) {
+    destroyRosEntities();
     return false;
   }
+  ros_init_stage_ = 6;
 
   if (rclc_executor_init(&executor_, &support_.context, 2, &allocator_) != RCL_RET_OK) {
+    destroyRosEntities();
     return false;
   }
+  ros_init_stage_ = 7;
 
   if (rclc_executor_add_subscription(&executor_, &cmd_vel_subscription_, &cmd_vel_msg_,
                                      &cmdVelCallback, ON_NEW_DATA) != RCL_RET_OK) {
+    destroyRosEntities();
     return false;
   }
+  ros_init_stage_ = 8;
 
   if (rclc_executor_add_timer(&executor_, &control_timer_) != RCL_RET_OK) {
+    destroyRosEntities();
     return false;
   }
+  ros_init_stage_ = 9;
 
   time_synced_ = rmw_uros_sync_session(1000) == RMW_RET_OK;
   ros_entities_created_ = true;
@@ -611,18 +667,29 @@ bool RobotApp::createRosEntities() {
 }
 
 void RobotApp::destroyRosEntities() {
-  if (!ros_entities_created_) {
-    return;
+  if (ros_init_stage_ >= 7) {
+    rclc_executor_fini(&executor_);
+  }
+  if (ros_init_stage_ >= 6) {
+    rcl_timer_fini(&control_timer_);
+  }
+  if (ros_init_stage_ >= 5) {
+    rcl_subscription_fini(&cmd_vel_subscription_, &node_);
+  }
+  if (ros_init_stage_ >= 4) {
+    rcl_publisher_fini(&battery_publisher_, &node_);
+  }
+  if (ros_init_stage_ >= 3) {
+    rcl_publisher_fini(&odom_publisher_, &node_);
+  }
+  if (ros_init_stage_ >= 2) {
+    rcl_node_fini(&node_);
+  }
+  if (ros_init_stage_ >= 1) {
+    rclc_support_fini(&support_);
   }
 
-  rcl_publisher_fini(&odom_publisher_, &node_);
-  rcl_publisher_fini(&battery_publisher_, &node_);
-  rcl_subscription_fini(&cmd_vel_subscription_, &node_);
-  rcl_timer_fini(&control_timer_);
-  rclc_executor_fini(&executor_);
-  rcl_node_fini(&node_);
-  rclc_support_fini(&support_);
-
+  ros_init_stage_ = 0;
   ros_entities_created_ = false;
   time_synced_ = false;
 }
