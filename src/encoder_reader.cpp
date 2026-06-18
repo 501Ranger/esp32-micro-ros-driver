@@ -1,4 +1,5 @@
 #include "encoder_reader.h"
+#include <driver/gpio.h>
 
 namespace robot {
 
@@ -22,9 +23,9 @@ void EncoderReader::begin(uint8_t pin_a, uint8_t pin_b, uint8_t index) {
 }
 
 int32_t EncoderReader::readTicks() const {
-  noInterrupts();
+  portENTER_CRITICAL(&mux_);
   const int32_t value = ticks_;
-  interrupts();
+  portEXIT_CRITICAL(&mux_);
   return value;
 }
 
@@ -41,9 +42,11 @@ void IRAM_ATTR EncoderReader::handleInterrupt1() {
 }
 
 void IRAM_ATTR EncoderReader::handleInterrupt() {
+  portENTER_CRITICAL_ISR(&mux_);
   const uint8_t current_state = readState();
   ticks_ += quadratureDelta(state_, current_state);
   state_ = current_state;
+  portEXIT_CRITICAL_ISR(&mux_);
 }
 
 int8_t EncoderReader::quadratureDelta(uint8_t previous_state, uint8_t current_state) {
@@ -53,7 +56,7 @@ int8_t EncoderReader::quadratureDelta(uint8_t previous_state, uint8_t current_st
 }
 
 uint8_t EncoderReader::readState() const {
-  return static_cast<uint8_t>((digitalRead(pin_a_) << 1) | digitalRead(pin_b_));
+  return static_cast<uint8_t>((gpio_get_level((gpio_num_t)pin_a_) << 1) | gpio_get_level((gpio_num_t)pin_b_));
 }
 
 }  // namespace robot

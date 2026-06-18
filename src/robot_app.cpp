@@ -2,7 +2,9 @@
 
 #include <cmath>
 #include <WiFi.h>
+#include <ESPmDNS.h>
 #include <ArduinoOTA.h>
+#include <driver/twai.h>
 
 #include <micro_ros_platformio.h>
 #include <rmw_microros/rmw_microros.h>
@@ -12,7 +14,7 @@
 
 namespace robot {
 
-using namespace robot_config;
+using namespace config;
 
 namespace {
 
@@ -36,7 +38,20 @@ void RobotApp::setup() {
   right_motor_.begin();
   setupSensors();
   setupTransport();
+  
+  // Initialize Battery Monitor
+  pinMode(BATTERY_ADC_PIN, INPUT);
+  pinMode(LOW_BATTERY_LED_PIN, OUTPUT);
+  digitalWrite(LOW_BATTERY_LED_PIN, HIGH); // Default off (active-low LED)
+
+  // Perform raw ADC reading on startup to initialize filter value
+  uint32_t init_pin_mv = analogReadMilliVolts(BATTERY_ADC_PIN);
+  battery_voltage_ = (static_cast<float>(init_pin_mv) / 1000.0f) * BATTERY_VOLTAGE_DIVIDER_RATIO;
+  float init_pct = (battery_voltage_ - BATTERY_MIN_V) / (BATTERY_MAX_V - BATTERY_MIN_V) * 100.0f;
+  battery_percentage_ = constrain(static_cast<int>(init_pct), 0, 100);
+
   web_manager_.begin(wifi_config_manager_);
+  web_manager_.setVofaDebugEnabled(network_config_.vofa_debug);
 
   (void) initializeRosMessages();
   imu_ready_ = imu_sensor_.begin();
@@ -44,7 +59,19 @@ void RobotApp::setup() {
     imu_ready_ = imu_sensor_.calibrateGyroBias();
   }
 
-  Serial1.begin(UART_BAUDRATE, SERIAL_8N1, 15, 16);
+  Serial1.begin(UART_BAUDRATE, SERIAL_8N1, UART1_RX, UART1_TX);
+
+  // Initialize new unused Serial2 (TX=IO1, RX=IO2)
+  Serial2.begin(NEW_SERIAL_BAUDRATE, SERIAL_8N1, NEW_SERIAL_RX, NEW_SERIAL_TX);
+
+  // Initialize new unused CAN (TX=IO6, RX=IO7)
+  setupCAN();
+
+  // Initialize last ticks to prevent delta spikes on first update
+  const int32_t raw_left_init = left_encoder_.readTicks();
+  const int32_t raw_right_init = right_encoder_.readTicks();
+  last_left_ticks_ = LEFT_ENCODER_INVERTED ? -raw_left_init : raw_left_init;
+  last_right_ticks_ = RIGHT_ENCODER_INVERTED ? -raw_right_init : raw_right_init;
 
   last_cmd_vel_ms_ = millis();
   last_control_update_ms_ = millis();
@@ -60,10 +87,53 @@ void RobotApp::loop() {
     ArduinoOTA.handle();
   }
   handleSerialCommands();
+
+  // Handle dynamic IMU calibration requests from Web API
+  if (web_manager_.checkAndClearImuCalibrateRequested()) {
+    stopMotors();
+#ifndef USE_SERIAL_TRANSPORT
+    Serial.println("IMU gyroscope calibration requested via Web API... Keep static.");
+#endif
+    if (imu_ready_) {
+      // Toggle LED to indicate active calibration status
+      digitalWrite(LOW_BATTERY_LED_PIN, LOW); // Active-low LED On
+      imu_sensor_.calibrateGyroBias();
+      digitalWrite(LOW_BATTERY_LED_PIN, HIGH); // Active-low LED Off
+#ifndef USE_SERIAL_TRANSPORT
+      Serial.println("IMU calibration successful!");
+#endif
+    } else {
+#ifndef USE_SERIAL_TRANSPORT
+      Serial.println("Warning: IMU not ready, calibration skipped.");
+#endif
+    }
+  }
+
   if (transport_ready_) {
     updateAgentStateMachine();
   }
+
+  // Update system status for web manager
+  SystemStatus status;
+  status.battery_voltage = battery_voltage_;
+  status.battery_percentage = battery_percentage_;
+  status.agent_state = agent_state_;
+  status.wifi_rssi = (WiFi.status() == WL_CONNECTED) ? WiFi.RSSI() : 0;
+  status.left_speed = left_wheel_.velocity_mps;
+  status.left_target = target_left_velocity_mps_;
+  status.right_speed = right_wheel_.velocity_mps;
+  status.right_target = target_right_velocity_mps_;
+  status.yaw = odom_yaw_;
+  status.uptime_sec = millis() / 1000;
+  status.vofa_debug = web_manager_.vofaDebugEnabled();
+  web_manager_.updateSystemStatus(status);
+
   web_manager_.loop();
+
+  // Periodically check battery status (every 1s)
+  if (millis() - last_battery_update_ms_ >= 1000) {
+    updateBattery();
+  }
 
   // Run control loop manually if not connected to micro-ROS agent
   if (agent_state_ != AgentState::AgentConnected) {
@@ -72,40 +142,56 @@ void RobotApp::loop() {
       controlTimerCallbackImpl();
     }
   }
+
+  // Handle low battery LED flash indicator
+  if (battery_voltage_ < LOW_BATTERY_THRESHOLD_V) {
+    // 2Hz flashing (250ms ON, 250ms OFF), active-low LED
+    digitalWrite(LOW_BATTERY_LED_PIN, ((millis() / 250) % 2 == 0) ? LOW : HIGH);
+  } else {
+    digitalWrite(LOW_BATTERY_LED_PIN, HIGH); // Off (HIGH)
+  }
 }
 
 void RobotApp::handleSerialCommands() {
-  static String input_buffer = "";
+  static char input_buffer[64];
+  static size_t buf_pos = 0;
   while (Serial1.available()) {
     char c = Serial1.read();
     if (c == '\n' || c == '\r') {
-      if (input_buffer.length() > 0) {
-        int separator_idx = input_buffer.indexOf(':');
-        if (separator_idx != -1) {
-          String cmd = input_buffer.substring(0, separator_idx);
-          float val = input_buffer.substring(separator_idx + 1).toFloat();
+      if (buf_pos > 0) {
+        input_buffer[buf_pos] = '\0';
+        char *separator = strchr(input_buffer, ':');
+        if (separator != nullptr) {
+          *separator = '\0';
+          char *cmd = input_buffer;
+          float val = atof(separator + 1);
 
           bool updated = true;
-          if (cmd == "p") kp_ = val;
-          else if (cmd == "i") ki_ = val;
-          else if (cmd == "d") kd_ = val;
-          else if (cmd == "f") kf_ = val;
-          else if (cmd == "o") output_limit_ = val;
-          else if (cmd == "m") motor_min_duty_ = val;
-          else updated = false;
+          if (strcmp(cmd, "p") == 0) kp_ = val;
+          else if (strcmp(cmd, "i") == 0) ki_ = val;
+          else if (strcmp(cmd, "d") == 0) kd_ = val;
+          else if (strcmp(cmd, "f") == 0) kf_ = val;
+          else if (strcmp(cmd, "o") == 0) output_limit_ = val;
+          else if (strcmp(cmd, "m") == 0) motor_min_duty_ = val;
+          else if (strcmp(cmd, "v") == 0) {
+            web_manager_.setVofaDebugEnabled(val > 0.5f);
+          } else updated = false;
 
           if (updated) {
             left_pid_.setGains(kp_, ki_, kd_);
             right_pid_.setGains(kp_, ki_, kd_);
             left_pid_.setOutputLimit(output_limit_);
             right_pid_.setOutputLimit(output_limit_);
-            Serial1.printf("Updated -> P:%.2f I:%.2f D:%.2f F:%.2f O:%.2f M:%.2f\n", kp_, ki_, kd_, kf_, output_limit_, motor_min_duty_);
+            Serial1.printf("Updated -> P:%.2f I:%.2f D:%.2f F:%.2f O:%.2f M:%.2f VOFA:%d\n",
+                           kp_, ki_, kd_, kf_, output_limit_, motor_min_duty_, web_manager_.vofaDebugEnabled());
           }
         }
-        input_buffer = "";
+        buf_pos = 0;
       }
     } else {
-      input_buffer += c;
+      if (buf_pos < sizeof(input_buffer) - 1) {
+        input_buffer[buf_pos++] = c;
+      }
     }
   }
 }
@@ -173,15 +259,17 @@ void RobotApp::controlTimerCallbackImpl() {
   applyMotorCommand(left_target, right_target);
 
   // VOFA+ JustFloat protocol
-  float debug_data[] = {
-      target_left_velocity_mps_,
-      left_wheel_.velocity_mps,
-      target_right_velocity_mps_,
-      right_wheel_.velocity_mps
-  };
-  Serial1.write(reinterpret_cast<uint8_t*>(debug_data), sizeof(debug_data));
-  const uint8_t tail[4] = {0x00, 0x00, 0x80, 0x7F};
-  Serial1.write(tail, 4);
+  if (web_manager_.vofaDebugEnabled()) {
+    float debug_data[] = {
+        target_left_velocity_mps_,
+        left_wheel_.velocity_mps,
+        target_right_velocity_mps_,
+        right_wheel_.velocity_mps
+    };
+    Serial1.write(reinterpret_cast<uint8_t*>(debug_data), sizeof(debug_data));
+    const uint8_t tail[4] = {0x00, 0x00, 0x80, 0x7F};
+    Serial1.write(tail, 4);
+  }
 
   const builtin_interfaces__msg__Time stamp = nowRosTime();
   fillOdomMessage(stamp);
@@ -213,6 +301,7 @@ void RobotApp::updateAgentStateMachine() {
     case AgentState::AgentAvailable:
       if (createRosEntities()) {
         agent_state_ = AgentState::AgentConnected;
+        web_manager_.playConnectSound();
       } else {
         destroyRosEntities();
         agent_state_ = AgentState::WaitingAgent;
@@ -258,23 +347,39 @@ void RobotApp::setupTransport() {
   Serial.begin(UART_BAUDRATE, SERIAL_8N1, UART0_RX, UART0_TX);
   if (wifi_ready_) {
     IPAddress agent_ip;
-    agent_ip.fromString(network_config_.agent_ip);
-    
-    // Register the custom transport directly without calling set_microros_wifi_transports,
-    // which would call WiFi.begin again and disrupt the connection.
-    static struct micro_ros_agent_locator locator;
-    locator.address = agent_ip;
-    locator.port = network_config_.agent_port;
+    if (!agent_ip.fromString(network_config_.agent_ip)) {
+      // It's not a raw IP, try resolving it.
+      // If it ends with .local, resolve via mDNS
+      if (network_config_.agent_ip.endsWith(".local")) {
+        MDNS.begin("esp32robot");
+        String host = network_config_.agent_ip.substring(0, network_config_.agent_ip.length() - 6);
+        agent_ip = MDNS.queryHost(host);
+      } else {
+        // Try standard DNS
+        WiFi.hostByName(network_config_.agent_ip.c_str(), agent_ip);
+      }
+    }
 
-    rmw_uros_set_custom_transport(
-        false,
-        (void *) &locator,
-        platformio_transport_open,
-        platformio_transport_close,
-        platformio_transport_write,
-        platformio_transport_read
-    );
-    transport_ready_ = true;
+    if (agent_ip != IPAddress(0, 0, 0, 0)) {
+      // Register the custom transport directly without calling set_microros_wifi_transports,
+      // which would call WiFi.begin again and disrupt the connection.
+      static struct micro_ros_agent_locator locator;
+      locator.address = agent_ip;
+      locator.port = network_config_.agent_port;
+
+      rmw_uros_set_custom_transport(
+          false,
+          (void *) &locator,
+          platformio_transport_open,
+          platformio_transport_close,
+          platformio_transport_write,
+          platformio_transport_read
+      );
+      transport_ready_ = true;
+    } else {
+      Serial.printf("Error: Could not resolve Agent address: %s\n", network_config_.agent_ip.c_str());
+      transport_ready_ = false;
+    }
   }
 #else
   ros_serial_.begin(UART_BAUDRATE, SERIAL_8N1, UART0_RX, UART0_TX);
@@ -327,6 +432,19 @@ void RobotApp::setupSensors() {
   right_encoder_.begin(M2_ENC_A, M2_ENC_B, 1);
 }
 
+void RobotApp::setupCAN() {
+  // Configure TWAI general, timing, and filter configs
+  twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
+      (gpio_num_t)CAN_TX_PIN, (gpio_num_t)CAN_RX_PIN, TWAI_MODE_NORMAL);
+  twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
+  twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+
+  // Install and start TWAI driver
+  if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK) {
+    (void)twai_start();
+  }
+}
+
 void RobotApp::applyMotorCommand(float left_velocity_mps, float right_velocity_mps) {
   const float control_dt = CONTROL_PERIOD_MS / 1000.0f;
   const auto compute_duty = [&](float target_mps, float measured_mps, PidController &pid, float previous_duty) {
@@ -369,17 +487,14 @@ void RobotApp::applyMotorCommand(float left_velocity_mps, float right_velocity_m
 }
 
 void RobotApp::updateWheelMeasurements(float dt) {
-  static int32_t last_left_ticks = 0;
-  static int32_t last_right_ticks = 0;
-
   const int32_t raw_left_ticks = left_encoder_.readTicks();
   const int32_t raw_right_ticks = right_encoder_.readTicks();
 
   left_wheel_.ticks = LEFT_ENCODER_INVERTED ? -raw_left_ticks : raw_left_ticks;
   right_wheel_.ticks = RIGHT_ENCODER_INVERTED ? -raw_right_ticks : raw_right_ticks;
 
-  const int32_t delta_left_ticks = left_wheel_.ticks - last_left_ticks;
-  const int32_t delta_right_ticks = right_wheel_.ticks - last_right_ticks;
+  const int32_t delta_left_ticks = left_wheel_.ticks - last_left_ticks_;
+  const int32_t delta_right_ticks = right_wheel_.ticks - last_right_ticks_;
 
   const float meters_per_tick = (PI_F * WHEEL_DIAMETER_M) / ENCODER_TICKS_PER_WHEEL_REV;
   const float left_delta_m = delta_left_ticks * meters_per_tick;
@@ -404,8 +519,8 @@ void RobotApp::updateWheelMeasurements(float dt) {
   odom_y_ += linear_velocity * sinf(heading_mid) * dt;
   odom_yaw_ += delta_yaw;
 
-  last_left_ticks = left_wheel_.ticks;
-  last_right_ticks = right_wheel_.ticks;
+  last_left_ticks_ = left_wheel_.ticks;
+  last_right_ticks_ = right_wheel_.ticks;
 }
 
 void RobotApp::fillOdomMessage(const builtin_interfaces__msg__Time &stamp) {
@@ -452,6 +567,9 @@ bool RobotApp::initializeRosMessages() {
   if (!geometry_msgs__msg__Twist__init(&target_cmd_)) {
     return false;
   }
+  if (!sensor_msgs__msg__BatteryState__init(&battery_msg_)) {
+    return false;
+  }
 
   if (!rosidl_runtime_c__String__assign(&odom_msg_.header.frame_id, ODOM_FRAME)) {
     return false;
@@ -459,6 +577,20 @@ bool RobotApp::initializeRosMessages() {
   if (!rosidl_runtime_c__String__assign(&odom_msg_.child_frame_id, BASE_FRAME)) {
     return false;
   }
+  if (!rosidl_runtime_c__String__assign(&battery_msg_.header.frame_id, BASE_FRAME)) {
+    return false;
+  }
+
+  // Set static fields for BatteryState message
+  battery_msg_.present = true;
+  battery_msg_.power_supply_status = 2; // POWER_SUPPLY_STATUS_DISCHARGING
+  battery_msg_.power_supply_health = 0; // POWER_SUPPLY_HEALTH_UNKNOWN
+  battery_msg_.power_supply_technology = 0; // POWER_SUPPLY_TECHNOLOGY_UNKNOWN
+  battery_msg_.temperature = NAN;
+  battery_msg_.current = NAN;
+  battery_msg_.charge = NAN;
+  battery_msg_.capacity = NAN;
+  battery_msg_.design_capacity = NAN;
 
   initializeCovariances();
   ros_messages_ready_ = true;
@@ -471,40 +603,63 @@ bool RobotApp::createRosEntities() {
   if (rclc_support_init(&support_, 0, nullptr, &allocator_) != RCL_RET_OK) {
     return false;
   }
+  ros_init_stage_ = 1;
 
   if (rclc_node_init_default(&node_, NODE_NAME, "", &support_) != RCL_RET_OK) {
+    destroyRosEntities();
     return false;
   }
+  ros_init_stage_ = 2;
 
   if (rclc_publisher_init_default(
           &odom_publisher_, &node_,
           ROSIDL_GET_MSG_TYPE_SUPPORT(nav_msgs, msg, Odometry), ODOM_TOPIC) != RCL_RET_OK) {
+    destroyRosEntities();
     return false;
   }
+  ros_init_stage_ = 3;
+
+  if (rclc_publisher_init_default(
+          &battery_publisher_, &node_,
+          ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, BatteryState), BATTERY_TOPIC) != RCL_RET_OK) {
+    destroyRosEntities();
+    return false;
+  }
+  ros_init_stage_ = 4;
 
   if (rclc_subscription_init_default(
           &cmd_vel_subscription_, &node_,
           ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist), CMD_VEL_TOPIC) != RCL_RET_OK) {
+    destroyRosEntities();
     return false;
   }
+  ros_init_stage_ = 5;
 
   if (rclc_timer_init_default(&control_timer_, &support_, RCL_MS_TO_NS(CONTROL_PERIOD_MS),
                               controlTimerCallback) != RCL_RET_OK) {
+    destroyRosEntities();
     return false;
   }
+  ros_init_stage_ = 6;
 
   if (rclc_executor_init(&executor_, &support_.context, 2, &allocator_) != RCL_RET_OK) {
+    destroyRosEntities();
     return false;
   }
+  ros_init_stage_ = 7;
 
   if (rclc_executor_add_subscription(&executor_, &cmd_vel_subscription_, &cmd_vel_msg_,
                                      &cmdVelCallback, ON_NEW_DATA) != RCL_RET_OK) {
+    destroyRosEntities();
     return false;
   }
+  ros_init_stage_ = 8;
 
   if (rclc_executor_add_timer(&executor_, &control_timer_) != RCL_RET_OK) {
+    destroyRosEntities();
     return false;
   }
+  ros_init_stage_ = 9;
 
   time_synced_ = rmw_uros_sync_session(1000) == RMW_RET_OK;
   ros_entities_created_ = true;
@@ -513,17 +668,29 @@ bool RobotApp::createRosEntities() {
 }
 
 void RobotApp::destroyRosEntities() {
-  if (!ros_entities_created_) {
-    return;
+  if (ros_init_stage_ >= 7) {
+    rclc_executor_fini(&executor_);
+  }
+  if (ros_init_stage_ >= 6) {
+    rcl_timer_fini(&control_timer_);
+  }
+  if (ros_init_stage_ >= 5) {
+    rcl_subscription_fini(&cmd_vel_subscription_, &node_);
+  }
+  if (ros_init_stage_ >= 4) {
+    rcl_publisher_fini(&battery_publisher_, &node_);
+  }
+  if (ros_init_stage_ >= 3) {
+    rcl_publisher_fini(&odom_publisher_, &node_);
+  }
+  if (ros_init_stage_ >= 2) {
+    rcl_node_fini(&node_);
+  }
+  if (ros_init_stage_ >= 1) {
+    rclc_support_fini(&support_);
   }
 
-  rcl_publisher_fini(&odom_publisher_, &node_);
-  rcl_subscription_fini(&cmd_vel_subscription_, &node_);
-  rcl_timer_fini(&control_timer_);
-  rclc_executor_fini(&executor_);
-  rcl_node_fini(&node_);
-  rclc_support_fini(&support_);
-
+  ros_init_stage_ = 0;
   ros_entities_created_ = false;
   time_synced_ = false;
 }
@@ -553,6 +720,36 @@ void RobotApp::setQuaternionFromYaw(double yaw, geometry_msgs__msg__Quaternion &
   quat.y = 0.0;
   quat.z = sin(yaw * 0.5);
   quat.w = cos(yaw * 0.5);
+}
+
+void RobotApp::updateBattery() {
+  last_battery_update_ms_ = millis();
+
+  // Read voltage in mV from ESP32 ADC
+  uint32_t pin_mv = analogReadMilliVolts(BATTERY_ADC_PIN);
+  
+  // Calculate battery voltage based on voltage divider
+  float raw_v = (static_cast<float>(pin_mv) / 1000.0f) * BATTERY_VOLTAGE_DIVIDER_RATIO;
+  
+  // Software Exponential Moving Average (EMA) low-pass filter to smooth out noise
+  battery_voltage_ = battery_voltage_ * 0.9f + raw_v * 0.1f;
+  
+  // Map voltage to percentage [10.0V, 12.6V] -> [0, 100]
+  float pct = (battery_voltage_ - BATTERY_MIN_V) / (BATTERY_MAX_V - BATTERY_MIN_V) * 100.0f;
+  battery_percentage_ = constrain(static_cast<int>(pct), 0, 100);
+
+
+
+  // Update WebManager battery status
+  web_manager_.setBatteryStatus(battery_voltage_, battery_percentage_);
+
+  // Publish to ROS 2 battery state topic
+  if (agent_state_ == AgentState::AgentConnected) {
+    battery_msg_.header.stamp = nowRosTime();
+    battery_msg_.voltage = battery_voltage_;
+    battery_msg_.percentage = static_cast<float>(battery_percentage_) / 100.0f;
+    (void) rcl_publish(&battery_publisher_, &battery_msg_, nullptr);
+  }
 }
 
 }  // namespace robot

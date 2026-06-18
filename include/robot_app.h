@@ -5,6 +5,7 @@
 #include <builtin_interfaces/msg/time.h>
 #include <geometry_msgs/msg/twist.h>
 #include <nav_msgs/msg/odometry.h>
+#include <sensor_msgs/msg/battery_state.h>
 #include <rcl/rcl.h>
 #include <rclc/executor.h>
 #include <rclc/rclc.h>
@@ -40,6 +41,8 @@ class RobotApp {
   void startConfigPortal();
   void startOta();
   void setupSensors();
+  void setupCAN();
+  void updateBattery();
   void applyMotorCommand(float left_velocity_mps, float right_velocity_mps);
   void handleSerialCommands();
   void updateWheelMeasurements(float dt);
@@ -71,10 +74,12 @@ class RobotApp {
   rcl_timer_t control_timer_;
   rclc_executor_t executor_;
   rcl_publisher_t odom_publisher_;
+  rcl_publisher_t battery_publisher_;
   rcl_subscription_t cmd_vel_subscription_;
 
   geometry_msgs__msg__Twist cmd_vel_msg_;
   nav_msgs__msg__Odometry odom_msg_;
+  sensor_msgs__msg__BatteryState battery_msg_;
   geometry_msgs__msg__Twist target_cmd_;
 
   AgentState agent_state_ = AgentState::WaitingAgent;
@@ -90,6 +95,9 @@ class RobotApp {
   WheelMeasurement right_wheel_;
   ImuSample latest_imu_;
 
+  int32_t last_left_ticks_ = 0;
+  int32_t last_right_ticks_ = 0;
+
   unsigned long last_agent_check_ms_ = 0;
   unsigned long last_cmd_vel_ms_ = 0;
   unsigned long last_control_update_ms_ = 0;
@@ -102,13 +110,20 @@ class RobotApp {
   float target_left_velocity_mps_ = 0.0f;
   float target_right_velocity_mps_ = 0.0f;
 
+  // Battery monitoring
+  float battery_voltage_ = 12.0f;
+  int battery_percentage_ = 100;
+  unsigned long last_battery_update_ms_ = 0;
+
   // Dynamic tuning parameters
-  float kp_ = robot_config::MOTOR_PID_KP;
-  float ki_ = robot_config::MOTOR_PID_KI;
-  float kd_ = robot_config::MOTOR_PID_KD;
-  float kf_ = robot_config::MOTOR_FEEDFORWARD_GAIN;
-  float output_limit_ = robot_config::MOTOR_PID_OUTPUT_LIMIT;
-  float motor_min_duty_ = robot_config::MOTOR_MIN_EFFECTIVE_DUTY;
+  float kp_ = config::MOTOR_PID_KP;
+  float ki_ = config::MOTOR_PID_KI;
+  float kd_ = config::MOTOR_PID_KD;
+  float kf_ = config::MOTOR_FEEDFORWARD_GAIN;
+  float output_limit_ = config::MOTOR_PID_OUTPUT_LIMIT;
+  float motor_min_duty_ = config::MOTOR_MIN_EFFECTIVE_DUTY;
+
+  int ros_init_stage_ = 0;
 };
 
 }  // namespace robot

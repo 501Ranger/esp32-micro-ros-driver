@@ -30,4 +30,18 @@ struct ImuSample {
   bool valid = false;
 };
 
+struct SystemStatus {
+  float battery_voltage = 12.0f;
+  int battery_percentage = 100;
+  AgentState agent_state = AgentState::WaitingAgent;
+  int wifi_rssi = 0;
+  float left_speed = 0.0f;
+  float left_target = 0.0f;
+  float right_speed = 0.0f;
+  float right_target = 0.0f;
+  float yaw = 0.0f;
+  uint32_t uptime_sec = 0;
+  bool vofa_debug = false;
+};
+
 }  // namespace robot

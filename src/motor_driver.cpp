@@ -6,7 +6,7 @@
 
 namespace robot {
 
-using namespace robot_config;
+using namespace config;
 
 MotorDriver::MotorDriver(uint8_t forward_pin, uint8_t reverse_pin, uint8_t forward_channel,
                          uint8_t reverse_channel, bool inverted)

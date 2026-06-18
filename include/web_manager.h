@@ -7,6 +7,7 @@
 #include <NetBIOS.h>
 
 #include "wifi_config_manager.h"
+#include "robot_types.h"
 
 namespace robot {
 
@@ -26,7 +27,29 @@ class WebManager {
   // Get the current velocity commands from the web joystick
   bool getVelocity(float &linear_mps, float &angular_radps) const;
 
+  // Set the current battery status to broadcast to web clients
+  void setBatteryStatus(float voltage, int percentage);
+
+  // VOFA+ debug toggle control
+  bool vofaDebugEnabled() const { return vofa_debug_enabled_; }
+  void setVofaDebugEnabled(bool enabled) { vofa_debug_enabled_ = enabled; }
+
+  // Update status info to broadcast
+  void updateSystemStatus(const SystemStatus &status) { status_ = status; }
+
+  // Check and clear IMU calibration request
+  bool checkAndClearImuCalibrateRequested() {
+    if (imu_calibrate_requested_) {
+      imu_calibrate_requested_ = false;
+      return true;
+    }
+    return false;
+  }
+
+  void playConnectSound();
+
  private:
+  void handleImuCalibrate(AsyncWebServerRequest *request);
   void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, 
                         AwsEventType type, void *arg, uint8_t *data, size_t len);
   void handleWebSocketMessage(void *arg, uint8_t *data, size_t len);
@@ -35,7 +58,6 @@ class WebManager {
   void handleWifiHistoryGet(AsyncWebServerRequest *request);
   void handleWifiHistoryDelete(AsyncWebServerRequest *request);
   void sendWifiStatus(AsyncWebServerRequest *request);
-  void playConnectSound();
   void updateFeedback();
 
   AsyncWebServer server_;
@@ -49,6 +71,11 @@ class WebManager {
   bool is_active_ = false;
   uint8_t connected_clients_ = 0;
 
+  // Battery monitoring
+  float battery_voltage_ = 12.0f;
+  int battery_percentage_ = 100;
+  unsigned long last_status_broadcast_ms_ = 0;
+
   // Buzzer sequence
   const BuzzerTone connect_sequence_[3] = {
     {1000, 100},
@@ -58,6 +85,10 @@ class WebManager {
   int current_tone_idx_ = -1;
   unsigned long tone_start_ms_ = 0;
 
+  bool vofa_debug_enabled_ = false;
+  SystemStatus status_;
+
+  volatile bool imu_calibrate_requested_ = false;
   const uint32_t COMMAND_TIMEOUT_MS = 500;
 };
 

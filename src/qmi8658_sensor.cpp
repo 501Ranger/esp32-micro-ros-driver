@@ -5,7 +5,7 @@
 
 namespace robot {
 
-using namespace robot_config;
+using namespace config;
 
 namespace {
 
@@ -55,6 +55,10 @@ bool QMI8658Sensor::begin() {
 }
 
 bool QMI8658Sensor::calibrateGyroBias(uint16_t samples) {
+  gyro_bias_x_ = 0.0f;
+  gyro_bias_y_ = 0.0f;
+  gyro_bias_z_ = 0.0f;
+
   float sum_x = 0.0f;
   float sum_y = 0.0f;
   float sum_z = 0.0f;

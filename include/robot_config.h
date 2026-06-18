@@ -2,7 +2,8 @@
 
 #include <Arduino.h>
 
-namespace robot_config {
+namespace robot {
+namespace config {
 
 constexpr uint8_t M1_IN1 = 14;
 constexpr uint8_t M1_IN2 = 21;
@@ -24,7 +25,18 @@ constexpr uint8_t BUZZER_PWM_CHANNEL = 4;
 
 constexpr uint8_t UART0_TX = 43;
 constexpr uint8_t UART0_RX = 44;
+constexpr uint8_t UART1_RX = 15;
+constexpr uint8_t UART1_TX = 16;
 constexpr uint32_t UART_BAUDRATE = 921600;
+
+// New unused serial port configuration
+constexpr uint8_t NEW_SERIAL_TX = 1;
+constexpr uint8_t NEW_SERIAL_RX = 2;
+constexpr uint32_t NEW_SERIAL_BAUDRATE = 115200;
+
+// New unused CAN port configuration (ESP32 TWAI)
+constexpr uint8_t CAN_TX_PIN = 6;
+constexpr uint8_t CAN_RX_PIN = 7;
 
 constexpr char WIFI_SETUP_AP_SSID[] = "ESP32-Robot-Setup";
 constexpr char WIFI_SETUP_AP_PASSWORD[] = "12345678";
@@ -66,11 +78,20 @@ constexpr float WEB_MAX_LINEAR_SPEED = 0.50f;
 constexpr float WEB_MAX_ANGULAR_SPEED = 3.00f;
 constexpr uint32_t IMU_I2C_FREQUENCY = 400000;
 
+// Battery monitor configuration
+constexpr uint8_t BATTERY_ADC_PIN = 18;
+constexpr uint8_t LOW_BATTERY_LED_PIN = 39;
+constexpr float BATTERY_VOLTAGE_DIVIDER_RATIO = (100.0f + 30.0f) / 30.0f; // 4.3333f
+constexpr float LOW_BATTERY_THRESHOLD_V = 10.5f;
+constexpr float BATTERY_MAX_V = 12.6f;
+constexpr float BATTERY_MIN_V = 10.0f;
 
 constexpr char NODE_NAME[] = "esp32s3_base";
 constexpr char CMD_VEL_TOPIC[] = "cmd_vel";
 constexpr char ODOM_TOPIC[] = "odom";
+constexpr char BATTERY_TOPIC[] = "battery_state";
 constexpr char ODOM_FRAME[] = "odom";
 constexpr char BASE_FRAME[] = "base_link";
 
-}  // namespace robot_config
+}  // namespace config
+}  // namespace robot

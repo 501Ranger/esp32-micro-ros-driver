@@ -1,149 +1,203 @@
-# ESP32-S3 micro-ROS 机器人下位机驱动
+# ESP32-S3 micro-ROS 两轮差速机器人
 
-## 简介
-本项目是一个基于 ESP32-S3 和 micro-ROS 架构的两轮差速机器人下位机固件。配合上位机（例如 RDK X5 开发板）协同工作，负责底层的硬件控制与传感器数据采集。
+基于 **ESP32-S3 + micro-ROS** 的两轮差速机器人，提供电机闭环控制、IMU 数据采集、轮式里程计计算以及 Web 遥控等功能。通过串口或 WiFi 与 ROS 2 上位机通信。
 
-上位机相关代码与工作空间请访问：[rdkrobot_ws](https://github.com/501Ranger/rdkrobot_ws)
+> **配套项目**
+> - 上位机工作空间：[rdkrobot_ws](https://github.com/501Ranger/rdkrobot_ws)
+> - 配套硬件 PCB（整理中）：即将开源于 [立创开源广场 (OSHWHub)](https://oshwhub.com/)
 
-本项目的配套硬件（包括 PCB 设计等）将会开源在 **立创开源广场 (OSHWHub)**，目前资料正在整理中，整理完成后将正式发布并在此处更新链接。
+## 功能特性
 
-通过本项目，ESP32-S3 能够通过串口或 WiFi 建立与上位机的 micro-ROS 连接，实现实时的里程计计算、IMU（姿态传感器）数据采集以及双电机的 PID 闭环控制。
+| 类别 | 说明 |
+|------|------|
+| **电机控制** | 双路 20 kHz PWM 驱动 + 位置式 PID 闭环 + 前馈补偿，支持占空比斜坡限速 |
+| **编码器** | 硬件中断正交解码，1040 脉冲/转，实时轮速计算 |
+| **IMU** | QMI8658C 六轴传感器（I2C），提供加速度 / 角速度 / 姿态数据 |
+| **里程计** | 差速运动学模型实时积分，发布 `odom` + `tf` |
+| **电池监测** | ADC 电压采集 + 分压比换算，低电量 LED 闪烁告警，发布 `battery_state` |
+| **Web 控制台** | 网页摇杆、实时状态面板、WebSocket 断线重连 |
+| **WiFi 配网** | AP 热点配置门户，NVS Flash 持久化，浏览器端历史记录管理 |
+| **局域网解析** | mDNS (`esp32robot.local`) + NetBIOS (`esp32robot`)，免 IP 访问 |
+| **OTA 升级** | 局域网无线固件烧录 |
+| **调试工具** | VOFA+ JustFloat 波形输出（Serial1），串口 CLI 动态 PID 调参 |
 
 ## 工程结构
+
 ```
 esp32-micro-ros-driver/
-├── include/                # 头文件目录
-│   ├── encoder_reader.h    # 编码器脉冲读取与速度计算
-│   ├── motor_driver.h      # 电机驱动控制接口 (高频 PWM)
-│   ├── pid_controller.h    # 电机速度 PID 闭环控制算法
-│   ├── qmi8658_sensor.h    # QMI8658 六轴 IMU 传感器驱动
-│   ├── robot_app.h         # micro-ROS 节点、发布者、订阅者应用逻辑
-│   ├── robot_config.h      # ⚠️ 机器人核心参数及硬件引脚配置文件
-│   ├── robot_types.h       # 核心数据结构定义 (如状态机、传感器数据格式)
-│   ├── web_manager.h       # 网页摇杆、WiFi 配网与 Web API
-│   └── wifi_config_manager.h # WiFi/Agent 配置的 Flash 持久化
-├── src/                    # 源代码目录
-│   ├── encoder_reader.cpp
-│   ├── main.cpp            # 主入口，处理硬件初始化与 micro-ROS 状态机
-│   ├── motor_driver.cpp
-│   ├── pid_controller.cpp
-│   ├── qmi8658_sensor.cpp
-│   ├── robot_app.cpp       # ROS 话题订阅(cmd_vel)与发布(odom, tf)的具体实现
-│   ├── web_manager.cpp     # Web 服务、网页摇杆与配网接口
-│   └── wifi_config_manager.cpp # NVS Flash 配置读写
-└── platformio.ini          # ⚠️ PlatformIO 工程配置文件 (包含多环境编译配置)
+├── include/
+│   ├── robot_config.h          # 引脚定义与物理参数配置
+│   ├── robot_types.h           # 核心数据结构与状态枚举
+│   ├── encoder_reader.h        # 编码器驱动
+│   ├── motor_driver.h          # 电机 PWM 驱动
+│   ├── pid_controller.h        # PID 闭环控制器
+│   ├── qmi8658_sensor.h        # IMU 传感器驱动
+│   ├── robot_app.h             # 应用核心协调类
+│   ├── web_manager.h           # Web 服务与 WebSocket
+│   ├── web_pages.h             # HTML/CSS/JS 静态资源
+│   └── wifi_config_manager.h   # NVS 配置读写
+├── src/                        # 对应源文件实现
+│   └── main.cpp                # Arduino 入口 (setup / loop)
+├── test/
+│   └── joystick.html           # 网页摇杆设计稿
+└── platformio.ini              # PlatformIO 工程配置
 ```
 
-## 主要功能
-- **双路电机驱动与闭环控制**：实现两轮独立的速度 PID 闭环控制，平滑响应速度指令。
-- **高频编码器读取**：实时读取双轮编码器数据，计算轮速及行驶距离。
-- **IMU 传感器集成**：集成 QMI8658 六轴 IMU 传感器，提供精准的加速度、角速度及姿态信息。
-- **micro-ROS 标准通信**：
-  - **订阅** `cmd_vel` (`geometry_msgs/msg/Twist`)，接收上位机下发的速度和转向控制指令。
-  - **发布** `odom` (`nav_msgs/msg/Odometry`)，向ROS 2网络提供基于轮式里程计的位置数据。
-  - **发布** `/tf` 变换，发布 `odom` 到 `base_link` 的坐标系转换。
-- **全新 Web 控制终端 & 网页摇杆**：基于 HTML5/CSS3/JS 全新设计的深色科技感网页控制端。除虚拟摇杆外，新增了 **E-Stop（紧急制动）安全按钮**、电池电量与控制状态面板，并支持 WebSocket 断线自动回连。
-- **mDNS & NetBIOS 局域网解析**：设备连接网络后，会自动注册 `http://esp32robot.local/` (mDNS) 和 `http://esp32robot/` (NetBIOS)，无需记忆动态 IP 即可轻松访问控制页面。
-- **多途径通信与 OTA 支持**：支持通过 **USB串口** 或 **WiFi** 与上位机 (Agent) 进行连接，并支持 **OTA (空中升级)** 无线刷写固件，极大方便调试。
+## 快速开始
 
-## 详细教程
+### 环境要求
 
-### 1. 开发环境准备
-推荐使用 **VSCode + PlatformIO** 插件进行开发：
-1. 下载并安装 [Visual Studio Code](https://code.visualstudio.com/)。
-2. 在 VSCode 的扩展市场中搜索并安装 `PlatformIO IDE` 插件。
-3. 克隆或下载本项目源码，使用 VSCode 打开 `esp32-micro-ros-driver` 文件夹。
-4. 等待 PlatformIO 自动加载项目并下载工具链。
+- [VSCode](https://code.visualstudio.com/) + [PlatformIO IDE](https://platformio.org/install/ide?install=vscode) 插件
+- USB 数据线（首次烧录）
+- ESP32-S3 开发板 + 配套驱动底板
 
-### 2. WiFi 与 Agent 配置
-固件支持通过网页配置 WiFi，并将配置保存到 ESP32 的 NVS Flash 中。普通 USB 烧录或 OTA 更新固件不会清除这部分数据，因此后续升级后仍会自动使用上一次保存的 WiFi。
+### 1. 克隆与打开
 
-首次启动或 WiFi 连接失败时，ESP32 会开启配置热点：
-
-```text
-SSID: ESP32-Robot-Setup
-密码: 12345678
-配置页: http://192.168.4.1/wifi
+```bash
+git clone https://github.com/501Ranger/esp32-micro-ros-driver.git
+# 使用 VSCode 打开项目文件夹，PlatformIO 将自动加载依赖
 ```
 
-在全新设计的深色科技感配置页中，你可以：
-- 填写 **WiFi SSID**、**WiFi 密码**、**micro-ROS Agent IP** 以及 **Agent UDP 端口**。
-- **历史记录管理器**：自动在浏览器本地缓存最近使用的最多 5 组配置记录，支持一键载入和快速切换，无需重复输入。
-- **状态面板**：直观查看当前的 STA（局域网）连接状态与 IP，以及 AP 热点 IP。
-- **清除配置**：提供“清除配置”按钮，确认后会擦除 NVS Flash 中的 WiFi 设定并重启设备，使其恢复到出厂默认状态。
+### 2. 配置参数
 
-保存配置后设备会自动重启，并尝试使用新配置连接局域网。连接成功后，访问设备的局域网 IP 仍可进入 `/wifi` 修改配置，也可以继续使用 OTA 无线烧录。
+如果你的硬件引脚或机器人参数与默认值不同，请修改 [`include/robot_config.h`](include/robot_config.h)：
 
-#### 访问控制终端与网页摇杆
-当 ESP32 已连接到 WiFi，或设备处于配置热点模式下时，都可以通过浏览器访问 Web 控制页面。
-得益于新增的域名解析服务，你**无需记忆多变的局域网 IP**，可直接使用以下本地域名进行访问：
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `WHEEL_DIAMETER_M` | 0.048 m | 轮径 |
+| `TRACK_WIDTH_M` | 0.130 m | 轮距 |
+| `ENCODER_TICKS_PER_WHEEL_REV` | 1040 | 编码器每转脉冲数 |
+| `PWM_FREQUENCY` | 20000 Hz | 电机 PWM 频率 |
+| `MOTOR_PID_KP / KI / KD` | 0.55 / 2.66 / 0.00 | PID 增益 |
 
-- **摇杆终端页面**：
-  - Windows / macOS / Linux / iOS / Android（同一局域网下）：
-    `http://esp32robot.local/` (推荐) 或 `http://设备IP/`
-  - Windows 系统（无 mDNS 支持时）：
-    `http://esp32robot/` (NetBIOS 协议)
-- **配网管理页面**：
-  - `http://esp32robot.local/wifi` 或 `http://esp32robot/wifi` 或 `http://设备IP/wifi`
+`platformio.ini` 中可设置 fallback 网络参数（Flash 中有保存的配置时优先使用 Flash 配置）：
 
-如果设备处于配置热点模式，默认地址是：
-- 摇杆页面: `http://192.168.4.1/`
-- 配网页面: `http://192.168.4.1/wifi`
-
-网页摇杆通过 WebSocket 以约 20Hz 发送速度指令。向上推动摇杆控制前进/后退，左右推动控制转向；松手后页面会立即发送零速度指令。若浏览器断开或一段时间没有收到摇杆数据，固件会自动停车。
-
-此外，Web 控制端集成了以下实用工具：
-- **E-Stop 紧急刹车按钮**：页面中央醒目的红色 `EMERGENCY STOP` 按钮。按下后，机器人将立即制动并锁定输出（控制状态变为“急停触发”），虚拟摇杆失效，防止误触。再次点击可解除急停，恢复就绪状态。
-- **设备状态监测**：实时显示当前电池电量、连接状态（已连接/未连接）及控制状态（就绪/急停触发），并支持断线自动重连。
-
-`platformio.ini` 中的 `build_flags` 仍可作为首次烧录的默认/fallback 配置；如果 Flash 中已经保存过网页配置，则优先使用 Flash 中的配置。
-
-打开项目根目录的 `platformio.ini`，找到 `build_flags` 部分：
 ```ini
-build_flags = 
-    -DWIFI_SSID=\"你的WiFi名称\"         # 可选：首次启动 fallback WiFi 名称
-    -DWIFI_PASSWORD=\"你的WiFi密码\"      # 可选：首次启动 fallback WiFi 密码
-    -DAGENT_IP=\"192.168.10.198\"       # 可选：fallback Agent IP
-    -DAGENT_PORT=8888                   # 可选：fallback Agent 端口
+build_flags =
+    -DWIFI_SSID=\"你的WiFi\"
+    -DWIFI_PASSWORD=\"你的密码\"
+    -DAGENT_IP=\"192.168.1.1\"
+    -DAGENT_PORT=8888
 ```
-> *注：除此之外，如果你的硬件引脚接线、电机参数（如轮径、编码器精度、减速比等）与默认值不一致，请在 `include/robot_config.h` 中进行相应的调整。*
 
-### 3. 如何使用多版本编译环境 (`platformio.ini` 解析)
-本项目在 `platformio.ini` 中配置了四种不同的编译环境 (`env`)，以便你在不同场景下无缝切换。
+### 3. 编译与烧录
 
-| 环境名 (`[env:xxx]`) | 通信方式 | 固件烧录方式 | 适用场景 |
-| --- | --- | --- | --- |
-| `esp32-s3-serial` | **USB串口** | USB 有线烧录 | 初期有线调试，直接通过 USB 线供电与通信。 |
-| `esp32-s3-wifi` | **WiFi** | USB 有线烧录 | 测试 WiFi 通信，但设备就在手边，通过有线烧录。 |
-| `esp32-s3-serial-ota` | **USB串口** | 局域网 OTA 无线烧录 | 机器人已组装，USB 用于通信，但希望通过无线烧录更新代码。 |
-| `esp32-s3-wifi-ota` | **WiFi** | 局域网 OTA 无线烧录 | **全无线模式**：通信与固件更新全部在局域网内无线完成。 |
+点击 VSCode 底部状态栏 **Build** (✓) 编译，**Upload** (→) 烧录。
 
-**如何切换和使用？**
-你可以通过修改 `platformio.ini` 第一部分中的 `default_envs` 来指定默认编译环境：
-```ini
-[platformio]
-default_envs = esp32-s3-serial  ; 例如：切换为普通串口通信+有线烧录版本
+> 首次编译将自动拉取 `micro_ros_platformio` 等依赖库，耗时较长。
+
+### 4. WiFi 配网
+
+首次启动或 WiFi 连接失败时，设备开启配置热点：
+
+| 项目 | 值 |
+|------|----|
+| SSID | `ESP32-Robot-Setup` |
+| 密码 | `12345678` |
+| 配置页 | `http://192.168.4.1/wifi` |
+
+在配置页面填写 WiFi 信息和 Agent 地址后保存，设备自动重启并连接网络。
+
+### 5. 启动上位机 Agent
+
+```bash
+# 串口通信
+docker run -it --rm -v /dev:/dev --privileged \
+  microros/micro-ros-agent:humble serial --dev /dev/ttyACM0 -b 921600 -v6
+
+# WiFi 通信
+docker run -it --rm --net=host \
+  microros/micro-ros-agent:humble udp4 --port 8888
 ```
-或者，你也可以在 VSCode 底部 PlatformIO 状态栏中，点击当前的环境名称，在弹出的列表中手动选择你需要的环境。
 
-*注意：如果你选择使用带有 `-ota` 后缀的环境，请确保将对应环境下的 `upload_port` 参数修改为该 ESP32 设备目前在局域网内被分配到的 IP 地址。*
+### 6. 验证
 
-### 4. 编译与运行
-1. **编译**：点击 VSCode 底部状态栏的 **`Build`** (✓ 图标)。首次编译时会自动拉取 `micro_ros_platformio` 等依赖库，可能需要一些时间，请耐心等待。
-2. **烧录**：编译成功后，使用数据线连接 ESP32-S3，点击 **`Upload`** (→ 图标) 进行烧录。
-3. **启动上位机 Agent**：
-   在你的上位机 (例如 RDK X5) 上，启动相应的 micro-ROS Agent。
-   - 如果你使用的是串口通信环境：
-     ```bash
-     docker run -it --rm -v /dev:/dev --privileged microros/micro-ros-agent:humble serial --dev /dev/ttyACM0 -b 921600 -v6
-     ```
-   - 如果你使用的是 WiFi 通信环境：
-     ```bash
-     docker run -it --rm --net=host microros/micro-ros-agent:humble udp4 --port 8888
-     ```
-4. **验证连接**：当下位机成功连接到 Agent 后，在上位机终端执行：
-   ```bash
-   ros2 node list
-   ```
-   如果出现 `/esp32s3_base` 节点，则证明下位机已成功接入 ROS 2 系统！你可以开始监听 `/odom` 话题或下发 `/cmd_vel` 速度控制了。
-5. **网页遥控**：在手机或电脑浏览器中打开 `http://esp32robot.local/` 或 `http://设备IP/`，即可使用全新设计的控制终端和网页摇杆临时接管底盘运动。控制页面支持紧急刹车（E-Stop）、实时电量指示，停止操作或关闭页面后会自动停车。
+```bash
+ros2 node list          # 应出现 /esp32s3_base
+ros2 topic echo /odom   # 查看里程计数据
+```
+
+## 编译环境
+
+项目在 `platformio.ini` 中定义了 4 个编译环境，按需切换：
+
+| 环境名 | 通信方式 | 烧录方式 | 说明 |
+|--------|----------|----------|------|
+| `esp32-s3-serial` | USB 串口 | 有线 | 有线调试首选 |
+| `esp32-s3-wifi` | WiFi UDP | 有线 | 测试无线通信 |
+| `esp32-s3-serial-ota` | USB 串口 | OTA 无线 | 已组装设备，串口通信 + 无线更新 |
+| `esp32-s3-wifi-ota` | WiFi UDP | OTA 无线 | 全无线模式 |
+
+切换方式：修改 `platformio.ini` 中 `default_envs`，或在 VSCode 底部状态栏选择。
+
+> 使用 OTA 环境时，需将 `upload_port` 设为设备当前的局域网 IP 或 `esp32robot.local`。
+
+## ROS 2 接口
+
+### 节点
+
+`/esp32s3_base`
+
+### 话题
+
+| 话题 | 类型 | 方向 | 频率 | 说明 |
+|------|------|------|------|------|
+| `/cmd_vel` | `geometry_msgs/Twist` | 订阅 | — | 速度指令，100 ms 超时自动停车 |
+| `/odom` | `nav_msgs/Odometry` | 发布 | 50 Hz | 轮式里程计（含协方差） |
+| `/tf` | `tf2_msgs/TFMessage` | 发布 | 50 Hz | `odom` → `base_link` 变换 |
+| `/battery_state` | `sensor_msgs/BatteryState` | 发布 | 1 Hz | 电池电压与电量百分比 |
+
+### 坐标系
+
+- `odom` — 里程计参考系
+- `base_link` — 机器人本体坐标系
+
+## Web 控制台
+
+设备连接 WiFi 后，通过浏览器访问控制页面：
+
+| 页面 | 地址 |
+|------|------|
+| 摇杆控制台 | `http://esp32robot.local/` |
+| WiFi 配网 | `http://esp32robot.local/wifi` |
+
+> Windows 无 mDNS 时可使用 `http://esp32robot/`（NetBIOS）。
+
+**控制优先级**：网页摇杆 > `cmd_vel` 话题。E-Stop 触发时锁定所有输出，需手动解除。
+
+## 依赖
+
+| 库 | 版本 | 用途 |
+|----|------|------|
+| [micro_ros_platformio](https://gitee.com/ohhuo/micro_ros_platformio.git) | — | micro-ROS 客户端 |
+| [ESPAsyncWebServer](https://github.com/mathieucarbou/ESPAsyncWebServer) | ≥ 3.3.23 | 异步 Web 服务 |
+| [ArduinoJson](https://github.com/bblanchon/ArduinoJson) | ≥ 6.21.3 | JSON 解析 |
+
+平台：`espressif32` / `arduino` / ROS 2 `humble`
+
+## 硬件引脚参考
+
+<details>
+<summary>点击展开默认引脚映射</summary>
+
+| 功能 | 引脚 |
+|------|------|
+| 左电机 IN1 / IN2 | GPIO 14 / 21 |
+| 左编码器 A / B | GPIO 11 / 10 |
+| 右电机 IN1 / IN2 | GPIO 48 / 47 |
+| 右编码器 A / B | GPIO 12 / 13 |
+| I2C SDA / SCL | GPIO 35 / 36 |
+| UART1 TX / RX | GPIO 16 / 15 |
+| Serial2 TX / RX | GPIO 1 / 2 |
+| CAN TX / RX | GPIO 6 / 7 |
+| 电池 ADC | GPIO 18 |
+| 低电量 LED | GPIO 39 |
+| 蜂鸣器 | GPIO 38 |
+| 按钮 LED | GPIO 37 |
+| 按钮 | GPIO 8 |
+
+</details>
+
+## 许可证
+
+待添加。
