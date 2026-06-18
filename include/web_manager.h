@@ -46,6 +46,8 @@ class WebManager {
     return false;
   }
 
+  void playConnectSound();
+
  private:
   void handleImuCalibrate(AsyncWebServerRequest *request);
   void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, 
@@ -56,7 +58,6 @@ class WebManager {
   void handleWifiHistoryGet(AsyncWebServerRequest *request);
   void handleWifiHistoryDelete(AsyncWebServerRequest *request);
   void sendWifiStatus(AsyncWebServerRequest *request);
-  void playConnectSound();
   void updateFeedback();
 
   AsyncWebServer server_;

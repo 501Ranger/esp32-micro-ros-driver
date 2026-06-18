@@ -1056,6 +1056,17 @@ const char WIFI_HTML[] PROGMEM = R"=====(
         </div>
       </div>
 
+      <div class="form-group">
+        <label>蜂鸣器提示音</label>
+        <div style="display: flex; align-items: center; gap: 10px; margin-top: 4px;">
+          <label class="switch">
+            <input type="checkbox" id="enable_buzzer" name="enable_buzzer" value="true">
+            <span class="slider round"></span>
+          </label>
+          <span style="font-size: 13px; color: var(--text-muted);">启用连接成功时的蜂鸣器提示音</span>
+        </div>
+      </div>
+
       <div class="button-group">
         <button type="submit">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1190,6 +1201,7 @@ const char WIFI_HTML[] PROGMEM = R"=====(
         if (!agentIpInput.value) agentIpInput.value = data.agent_ip || '';
         if (!agentPortInput.value) agentPortInput.value = data.agent_port || 8888;
         document.getElementById('vofa_debug').checked = data.vofa_debug || false;
+        document.getElementById('enable_buzzer').checked = data.enable_buzzer !== false;
         
         staStatusEl.innerText = data.connected ? `已连接 (${data.local_ip})` : '未连接';
         staStatusEl.style.color = data.connected ? 'var(--success)' : 'var(--error)';

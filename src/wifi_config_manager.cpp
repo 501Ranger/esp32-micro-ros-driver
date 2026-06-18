@@ -40,6 +40,7 @@ NetworkConfig WifiConfigManager::load() const {
   config.agent_ip = preferences_.getString(KEY_AGENT_IP, "");
   config.agent_port = preferences_.getUShort(KEY_AGENT_PORT, AGENT_PORT);
   config.vofa_debug = preferences_.getBool("vofa_dbg", false);
+  config.enable_buzzer = preferences_.getBool("buzzer", true);
   config.loaded_from_flash = config.ssid.length() > 0;
 
   if (config.ssid.length() == 0) {
@@ -67,6 +68,7 @@ bool WifiConfigManager::save(const NetworkConfig &config) {
   ok = (preferences_.putString(KEY_AGENT_IP, config.agent_ip) > 0) && ok;
   ok = (preferences_.putUShort(KEY_AGENT_PORT, config.agent_port) > 0) && ok;
   ok = preferences_.putBool("vofa_dbg", config.vofa_debug) && ok;
+  ok = preferences_.putBool("buzzer", config.enable_buzzer) && ok;
   return ok;
 }
 
@@ -97,6 +99,7 @@ std::vector<NetworkConfig> WifiConfigManager::getHistory() const {
         item.password = val["pass"] | "";
         item.agent_ip = val["ip"] | "";
         item.agent_port = val["port"] | 8888;
+        item.enable_buzzer = val["buzzer"] | true;
         item.has_wifi = item.ssid.length() > 0;
         item.loaded_from_flash = true;
         history.push_back(item);
@@ -115,6 +118,7 @@ bool WifiConfigManager::saveHistory(const std::vector<NetworkConfig> &history) {
     obj["pass"] = item.password;
     obj["ip"] = item.agent_ip;
     obj["port"] = item.agent_port;
+    obj["buzzer"] = item.enable_buzzer;
   }
 
   String json_str;

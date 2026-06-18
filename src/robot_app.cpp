@@ -301,6 +301,7 @@ void RobotApp::updateAgentStateMachine() {
     case AgentState::AgentAvailable:
       if (createRosEntities()) {
         agent_state_ = AgentState::AgentConnected;
+        web_manager_.playConnectSound();
       } else {
         destroyRosEntities();
         agent_state_ = AgentState::WaitingAgent;

@@ -14,6 +14,7 @@ struct NetworkConfig {
   bool has_wifi = false;
   bool loaded_from_flash = false;
   bool vofa_debug = false;
+  bool enable_buzzer = true;
 };
 
 class WifiConfigManager {

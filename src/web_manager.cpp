@@ -219,6 +219,7 @@ void WebManager::handleWifiSave(AsyncWebServerRequest *request) {
   config.agent_port = static_cast<uint16_t>(requested_port);
   config.has_wifi = config.ssid.length() > 0;
   config.vofa_debug = request->hasParam("vofa_debug", true);
+  config.enable_buzzer = request->hasParam("enable_buzzer", true);
 
   IPAddress parsed_agent_ip;
   bool is_valid_ip = parsed_agent_ip.fromString(config.agent_ip);
@@ -326,6 +327,7 @@ void WebManager::sendWifiStatus(AsyncWebServerRequest *request) {
   doc["local_ip"] = WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "";
   doc["ap_ip"] = WiFi.softAPIP().toString();
   doc["vofa_debug"] = config.vofa_debug;
+  doc["enable_buzzer"] = config.enable_buzzer;
 
   char output[384];
   serializeJson(doc, output, sizeof(output));
@@ -333,10 +335,10 @@ void WebManager::sendWifiStatus(AsyncWebServerRequest *request) {
 }
 
 void WebManager::updateFeedback() {
-  if (connected_clients_ == 0) {
-    digitalWrite(GAMEPAD_LED_PIN, HIGH); // Off
+  if (status_.agent_state == AgentState::AgentConnected) {
+    digitalWrite(GAMEPAD_LED_PIN, LOW); // On (active-low LED)
   } else {
-    digitalWrite(GAMEPAD_LED_PIN, LOW); // On
+    digitalWrite(GAMEPAD_LED_PIN, HIGH); // Off
   }
 
   if (current_tone_idx_ != -1) {
@@ -355,6 +357,11 @@ void WebManager::updateFeedback() {
 }
 
 void WebManager::playConnectSound() {
+  NetworkConfig config = wifi_config_manager_ != nullptr ? wifi_config_manager_->load() : NetworkConfig();
+  if (!config.enable_buzzer) {
+    return;
+  }
+
   current_tone_idx_ = 0;
   tone_start_ms_ = millis();
   ledcWriteTone(BUZZER_PWM_CHANNEL, connect_sequence_[0].frequency);
